@@ -1,6 +1,6 @@
 # Validation record
 
-Validated locally on 9 September 2026. This record distinguishes tested behavior from production acceptance that still needs real credentials.
+Validated locally and on Render on 9 September 2026. This record distinguishes tested behavior from production acceptance that still needs real credentials.
 
 ## Passed
 
@@ -22,7 +22,7 @@ Validated locally on 9 September 2026. This record distinguishes tested behavior
 
 - The provided spreadsheet returned 401 to anonymous export. Confirm its real layout from an accessible Excel/CSV sample and adapt the parser if it is not the documented row format.
 - Configure Google Cloud OAuth and complete real login, refresh, Sheets read, Drive watch, and Calendar integration tests.
-- Provision the GitHub repository and Render/Vercel projects with authenticated deployment accounts. No public deployment has been made. The existing GitHub CLI login was invalid; Vercel CLI reported no existing credentials.
+- Render deployment is now live; see `PRODUCTION.md`. Google OAuth callback registration still needs correction before live Google integration checks can finish.
 - Run the full public-deployment checklist in `DEPLOYMENT.md`, including real modification/cancellation, repeated synchronization, webhook notification, and fallback cron checks.
 - Configure GitHub branch protection and verify Render/Vercel production deployment gates in the platform accounts.
 

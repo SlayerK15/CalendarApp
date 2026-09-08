@@ -1,5 +1,7 @@
 # Deploy LiveTimetable
 
+Current deployment: [frontend](https://calendarapp-2r1h.onrender.com) and [API health](https://livetimetable-api.onrender.com/health) are live on Render. See [the production record](PRODUCTION.md) for verified checks and the remaining Google OAuth setup.
+
 Primary: **Vercel frontend + Render FastAPI + Render PostgreSQL + Render Cron**. This guide accompanies executable configuration in the repository; it is not a claim that these services have already been provisioned.
 
 ## Prerequisites
@@ -179,8 +181,8 @@ For future custom domains, configure DNS and platform domains for `app.livetimet
 
 ## Ready-to-use Render-only Blueprint
 
-Use **`render-only.yaml`** as the Blueprint Path when deploying the entire app on Render. It provisions `livetimetable-web`, `livetimetable-api`, `livetimetable-db`, and `livetimetable-sync-cron`. The frontend uses the tested standalone Docker image and receives its API URL from the API service's assigned Render URL.
+Use **`render-only.yaml`** as the Blueprint Path when deploying the entire app on Render. It provisions or adopts `CalendarApp`, `livetimetable-api`, `livetimetable-db`, and `livetimetable-sync-cron`. The frontend uses the tested standalone Docker image and receives its API URL from the API service's assigned Render URL.
 
-The API still prompts for its frontend origin, backend URL, OAuth callback, and secrets. Set frontend origin/CORS to the assigned `livetimetable-web` HTTPS URL. Register the assigned API callback URL on the Google OAuth client. The exact public hostnames must be checked after service creation; service names do not reserve domains.
+The API still prompts for its frontend origin, backend URL, OAuth callback, and secrets. Set frontend origin/CORS to the assigned `CalendarApp` HTTPS URL. Register the assigned API callback URL on the Google OAuth client. The exact public hostnames must be checked after service creation; service names do not reserve domains.
 
 For agent-assisted provisioning, place a Render API key in the ignored root `.env` as `RENDER_API_KEY=...`; do not send it in chat or commit it. Create the key in Render Account Settings. `RENDER_OWNER_ID` can optionally select a specific workspace when the account has more than one. These are deployment credentials, not application environment values, and must not be copied to the frontend or application services.

@@ -1,13 +1,13 @@
-# Render-only deployment: select this file as the Blueprint Path.
-# Includes frontend, API, PostgreSQL, and the five-minute sync cron.
+# Render-only deployment matching the existing Render services.
+# Reuses the free CalendarApp frontend; API, database, and cron use paid plans.
 services:
 - type: web
-  name: livetimetable-web
+  name: CalendarApp
   runtime: docker
   rootDir: frontend
   dockerfilePath: ./Dockerfile
   dockerContext: .
-  plan: 0.5c-512mb
+  plan: free
   region: singapore
   healthCheckPath: /
   autoDeployTrigger: checksPass

@@ -1,0 +1,41 @@
+# Render production deployment
+
+Deployed 9 September 2026 from `SlayerK15/CalendarApp`, branch `main`.
+
+| Resource | URL or ID | Configuration |
+| --- | --- | --- |
+| Frontend: CalendarApp | https://calendarapp-2r1h.onrender.com | Existing free Docker web service, `frontend` root |
+| API: livetimetable-api | https://livetimetable-api.onrender.com | Python web service, 0.5 CPU / 512 MB |
+| Database: livetimetable-db | dpg-dag8cd67bikc73945h80-a | PostgreSQL 16, 0.1 CPU / 256 MB, 5 GB |
+| Sync: livetimetable-sync-cron | crn-dag8huht0dsc73ecar8g | Python cron, 0.5 CPU / 512 MB, every five minutes |
+
+All resources are in Singapore. The existing frontend, API, and database were reused. A missing cron was added. All three services have `autoDeployTrigger=checksPass`. `render-only.yaml` matches the existing frontend name and free plan to avoid creating a duplicate frontend or upgrading its plan on a future Blueprint sync.
+
+Application secrets were sent directly from the ignored local `.env` to Render environment variables. The Render API key is not an application environment variable and was not copied into any service. No secrets are included in this record or Git-tracked environment files.
+
+## Verified publicly
+
+- Frontend returns HTTP 200, loads its assets, and renders without browser JavaScript errors.
+- Mobile viewport has no horizontal overflow.
+- Signed-out dashboard redirects to sign-in.
+- API `/health` returns HTTP 200 with `{"status":"ok"}`.
+- API `/health/db` returns HTTP 200 with `{"status":"ok"}`.
+- Production PostgreSQL migration version is `0001`.
+- Google login-start returns 200 and uses PKCE S256.
+- Login binding cookie is Secure, HttpOnly, and SameSite=Lax.
+- Frontend, API, and cron deployments report `live`.
+- Cron smoke test completed successfully; Render reports last success at `2026-09-08T22:17:38Z` (9 September in Asia/Kolkata).
+
+## Required Google OAuth correction
+
+Google currently returns **Error 400: redirect_uri_mismatch**. In Google Cloud Console → Google Auth Platform → Clients → the configured **Web application** OAuth client, add this exact **Authorized redirect URI**:
+
+```text
+https://livetimetable-api.onrender.com/api/auth/google/callback
+```
+
+Save the client, allow configuration propagation, and sign in from the frontend URL above. The backend already sends this callback URI; changing the Render environment is not required. The Render API key cannot edit Google Cloud settings.
+
+After login, confirm spreadsheet access and actual layout, programme/section selection, calendar creation, repeat sync without duplicates, modification/cancellation, and real Drive webhook delivery. No active timetable sources existed at deployment verification, so a cron smoke test checks execution and database access, not a real Google synchronization.
+
+The original sheet returned 401 to anonymous export during implementation. Its actual layout still needs validation against `SHEET_FORMAT.md`; the app reads it using the signed-in user's Google account.
