@@ -1,13 +1,13 @@
 # Validation record
 
-Validated locally and on Render on 9 September 2026. This record distinguishes tested behavior from production acceptance that still needs real credentials.
+Validated locally and on Render on 9 September 2026. This record distinguishes tested behavior from production acceptance that still needs a selected programme and section.
 
 ## Passed
 
 - Frontend ESLint, TypeScript type checking, and Next.js 16.3.4 production build.
 - Desktop (1440px) and mobile (390px) browser render checks: no JavaScript errors or horizontal overflow.
 - Both Docker images build successfully; Compose starts frontend, API, and PostgreSQL.
-- Backend suite: **12 tests pass**, including inside the Python 3.12 Docker image with PostgreSQL 16 available.
+- Backend suite: **40 tests pass locally**, with the PostgreSQL locking integration test skipped locally and configured to run in CI. The earlier 12-test baseline also passed inside the Python 3.12 Docker image with PostgreSQL 16.
 - Stable event IDs across room changes, cancellation/restoration, repeated sync, and simulated crash after Google write.
 - Failed sheet parsing and failed calendar writes do not advance successful fingerprints or trigger cancellation from missing input.
 - Missing classes are marked cancelled; suspicious event-count drops abort.
@@ -18,11 +18,16 @@ Validated locally and on Render on 9 September 2026. This record distinguishes t
 - Alembic initial migration and schema drift checks on SQLite and PostgreSQL.
 - `render.yaml` validates against the current JSON Schema fetched from `https://render.com/schema/render.yaml.json`.
 
+## College Excel grid validation
+
+The real workbook was read and parsed inside the Render backend without exporting its full contents or writing calendar events. All dated class cells passed validation: **878 unique event IDs**, **823 scheduled entries**, **55 cancellations**. Scheduled counts: MBA A 139, B 136, C 135, D 139; MBA Analytics E 137, F 137. The grid adapter uses the original worksheet's section labels, dates, time slots, rich-text strikethroughs and overrides.
+
+Synthetic regression fixtures cover whole-cell and partial strikethrough cancellation, replacement classes sharing a slot, quizzes split across lines, observed time notations, room overrides, online classes, merged durations, duplicate labels, stable IDs after rescheduling, invalid dates and ambiguous entries. Test fixtures contain no workbook export or credentials.
+
 ## Still required before production sign-off
 
-- The provided spreadsheet returned 401 to anonymous export. Confirm its real layout from an accessible Excel/CSV sample and adapt the parser if it is not the documented row format.
-- Configure Google Cloud OAuth and complete real login, refresh, Sheets read, Drive watch, and Calendar integration tests.
-- Render deployment is now live; see `PRODUCTION.md`. Google OAuth callback registration is accepted; completing sign-in is still required for live Google integration checks.
+- Complete real Drive watch and Calendar integration tests after selecting a programme and section.
+- Render deployment is now live; see `PRODUCTION.md`. Google OAuth sign-in and authenticated Excel reads have succeeded.
 - Run the full public-deployment checklist in `DEPLOYMENT.md`, including real modification/cancellation, repeated synchronization, webhook notification, and fallback cron checks.
 - Configure GitHub branch protection and verify Render/Vercel production deployment gates in the platform accounts.
 

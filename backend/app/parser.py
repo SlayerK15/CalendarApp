@@ -3,12 +3,17 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from app.college_grid import adapt_college_grid
+
 REQUIRED = {"id", "programme", "section", "title", "date", "start_time", "end_time"}
 
 
 def parse_sheet(values, timezone="Asia/Kolkata"):
     if not values:
         raise ValueError("Spreadsheet is empty; refusing to remove existing events")
+    grid = adapt_college_grid(values)
+    if grid is not None:
+        values = grid
     headers = [str(v).strip().lower() for v in values[0]]
     if len(set(headers)) != len(headers) or not REQUIRED.issubset(headers):
         raise ValueError("Expected unique headers: " + ", ".join(sorted(REQUIRED)))

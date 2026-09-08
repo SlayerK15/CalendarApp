@@ -4,7 +4,7 @@ Next.js frontend, FastAPI backend, and PostgreSQL: connect a college timetable i
 
 ## Status
 
-The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and five-minute sync cron are configured. Google now accepts the production callback; start login with **Connect with Google** on the live site. See [the production record](docs/PRODUCTION.md). Real Google API acceptance checks still require a successful user login. Authenticated diagnostics confirmed the supplied source is an Excel `.xlsx` file. Excel downloads are supported after reconnecting Google for Drive read-only content permission; its actual worksheet layout still needs inspection. The current parser supports the documented [row contract](docs/SHEET_FORMAT.md); an Excel/CSV export is needed if the real timetable uses a different layout. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
+The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and five-minute sync cron are configured. Google sign-in and authenticated access to the supplied Excel workbook work. The college grid adapter was validated inside the backend against the real `Term-I` worksheet: 823 scheduled entries and 55 cancellations across MBA A–D and MBA Analytics E–F. See [the input formats](docs/SHEET_FORMAT.md) and [the production record](docs/PRODUCTION.md). Selecting a programme and section starts calendar synchronization. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
 
 ## Run locally
 

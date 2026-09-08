@@ -6,7 +6,7 @@ Primary: **Vercel frontend + Render FastAPI + Render PostgreSQL + Render Cron**.
 
 ## Prerequisites
 
-A GitHub repository containing this project, access to a Vercel account and Render workspace, and a Google Cloud project with OAuth credentials. The supplied sheet must be readable by the signed-in Google account and conform to [SHEET_FORMAT.md](SHEET_FORMAT.md). Its actual layout remains unverified because the anonymous export returned 401.
+A GitHub repository containing this project, access to a Vercel account and Render workspace, and a Google Cloud project with OAuth credentials. The supplied sheet must be readable by the signed-in Google account and conform to [SHEET_FORMAT.md](SHEET_FORMAT.md). The supplied Excel section grid is supported; the signed-in Google account must grant Drive read-only content access.
 
 No SSH setup is required. Run commands locally, through Render's dashboard shell, or using the supplied deployment commands. Store secrets only in platform environment settings or ignored `.env` files.
 
