@@ -38,4 +38,4 @@ Start login from the frontend’s **Connect with Google** button. Opening the ca
 
 After login, confirm spreadsheet access and actual layout, programme/section selection, calendar creation, repeat sync without duplicates, modification/cancellation, and real Drive webhook delivery. No active timetable sources existed at deployment verification, so a cron smoke test checks execution and database access, not a real Google synchronization.
 
-The original sheet returned 401 to anonymous export during implementation. Its actual layout still needs validation against `SHEET_FORMAT.md`; the app reads it using the signed-in user's Google account.
+Google sign-in has now succeeded. Authenticated diagnostics identified the source as `Term- I Class Schedule MBA & MBAA-2026-28.xlsx` (Excel MIME type), which Sheets API cannot read. The app now supports Drive downloads of Excel files and offers **Reconnect Google** to existing metadata-only connections. The real worksheet layout remains unverified until the user grants Drive read-only content access. See `SHEET_FORMAT.md`.

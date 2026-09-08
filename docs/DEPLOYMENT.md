@@ -18,7 +18,7 @@ No SSH setup is required. Run commands locally, through Render's dashboard shell
 4. Add the requested data-access scopes:
    - `openid`, `email`, `profile`
    - `https://www.googleapis.com/auth/spreadsheets.readonly`
-   - `https://www.googleapis.com/auth/drive.metadata.readonly`
+   - `https://www.googleapis.com/auth/drive.readonly`
    - `https://www.googleapis.com/auth/calendar.app.created`
    - `https://www.googleapis.com/auth/calendar.calendarlist.readonly`
 5. Create an OAuth client of type **Web application**. Store its client ID and secret in the backend environment only.
@@ -62,7 +62,8 @@ The Blueprint uses current plan IDs and service-level secret prompts; Render doe
 | GOOGLE_CLIENT_SECRET | OAuth web client secret |
 | GOOGLE_REDIRECT_URI | `https://<your-api>.onrender.com/api/auth/google/callback` |
 | GOOGLE_SPREADSHEET_ID | `1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN` |
-| GOOGLE_SHEET_GID | `129828207` |
+| GOOGLE_SHEET_GID | `129828207` (native Google Sheets only) |
+| EXCEL_SHEET_NAME | Exact Excel worksheet name when the workbook has multiple tabs |
 | GOOGLE_WEBHOOK_SECRET | Random high-entropy string, shared by API and cron |
 | TOKEN_ENCRYPTION_KEY | Fernet key, shared by API and cron |
 | SYNC_INTERVAL_SECONDS | 300 (keep Blueprint cron cadence aligned) |
@@ -186,3 +187,5 @@ Use **`render-only.yaml`** as the Blueprint Path when deploying the entire app o
 The API still prompts for its frontend origin, backend URL, OAuth callback, and secrets. Set frontend origin/CORS to the assigned `CalendarApp` HTTPS URL. Register the assigned API callback URL on the Google OAuth client. The exact public hostnames must be checked after service creation; service names do not reserve domains.
 
 For agent-assisted provisioning, place a Render API key in the ignored root `.env` as `RENDER_API_KEY=...`; do not send it in chat or commit it. Create the key in Render Account Settings. `RENDER_OWNER_ID` can optionally select a specific workspace when the account has more than one. These are deployment credentials, not application environment values, and must not be copied to the frontend or application services.
+
+Excel files need Drive content access. Existing metadata-only Google connections show a **Reconnect Google** action to request the read-only content scope. Drive `files.watch` continues to detect changes to the original Excel file; no converted copy is created. Public OAuth verification must cover the requested Drive scope.

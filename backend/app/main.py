@@ -19,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.db import get_db
-from app.google import Google
+from app.google import Google, GooglePermissionRequired
 from app.jobs.renew_google_watch import renew_source
 from app.locks import source_lock
 from app.models import AuthFlow, Event, Session, Source, SyncRun, User, Watch
@@ -130,7 +130,7 @@ def auth_start(response: Response, db: DBSession = Depends(get_db)):
             "client_id": config.google_client_id,
             "redirect_uri": config.google_redirect_uri,
             "response_type": "code",
-            "scope": "openid email profile https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.metadata.readonly https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            "scope": "openid email profile https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist.readonly",
             "access_type": "offline",
             "prompt": "consent",
             "state": state,
@@ -242,6 +242,8 @@ def me(user: User = Depends(current_user)):
 def options(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     try:
         events = parse_sheet(Google(db, user).sheet(user_source(db, user)), settings().timetable_timezone)
+    except GooglePermissionRequired as exc:
+        raise HTTPException(403, {"message": str(exc), "code": "google_reconnect_required"}) from None
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
     except Exception:

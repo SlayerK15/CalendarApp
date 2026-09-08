@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     google_redirect_uri: str = ""
     google_spreadsheet_id: str = "1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN"
     google_sheet_gid: str = "129828207"
+    excel_sheet_name: str = ""
     google_webhook_secret: str = ""
     token_encryption_key: str = ""
     sync_interval_seconds: int = 300

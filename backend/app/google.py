@@ -4,7 +4,15 @@ from urllib.parse import quote
 import httpx
 
 from app.config import settings
+from app.excel import MAX_DOWNLOAD_BYTES, read_excel
 from app.security import decrypt, encrypt
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+SHEETS_MIME = "application/vnd.google-apps.spreadsheet"
+
+
+class GooglePermissionRequired(ValueError):
+    pass
 
 
 class Google:
@@ -39,6 +47,48 @@ class Google:
         return response.json() if response.content else {}
 
     def sheet(self, source):
+        try:
+            return self._sheet(source)
+        except httpx.HTTPStatusError as exc:
+            try:
+                error = exc.response.json().get("error", {})
+                reasons = {item.get("reason") for item in error.get("details", [])}
+            except (ValueError, AttributeError, TypeError):
+                reasons = set()
+            if "SERVICE_DISABLED" in reasons:
+                service = "Google Sheets" if exc.request.url.host == "sheets.googleapis.com" else "Google Drive"
+                raise ValueError(
+                    f"Enable the {service} API in the Google Cloud project, then reload this page."
+                ) from None
+            if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in reasons:
+                raise GooglePermissionRequired(
+                    "Reconnect Google and allow read-only access to the timetable file."
+                ) from None
+            if exc.response.status_code in {401, 403}:
+                raise ValueError(
+                    "Google denied access to the timetable. Check that the signed-in account can view and download it."
+                ) from None
+            if exc.response.status_code == 404:
+                raise ValueError(
+                    "The timetable file was not found or is not shared with the signed-in Google account."
+                ) from None
+            raise
+
+    def _sheet(self, source):
+        file_url = f"https://www.googleapis.com/drive/v3/files/{quote(source.spreadsheet_id, safe='')}"
+        file = self.request("GET", file_url, params={"fields": "mimeType", "supportsAllDrives": "true"})
+        if file["mimeType"] == XLSX_MIME:
+            scopes = set(decrypt(self.user.tokens).get("scope", "").split())
+            if not scopes.intersection(
+                {"https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/drive"}
+            ):
+                raise GooglePermissionRequired(
+                    "Your timetable is an Excel workbook. Reconnect Google to grant read-only Drive access so its contents can be read."
+                )
+            content = self.download_excel(file_url)
+            return read_excel(content, settings().excel_sheet_name)
+        if file["mimeType"] != SHEETS_MIME:
+            raise ValueError("Use a Google Sheets spreadsheet or an Excel .xlsx timetable.")
         base = f"https://sheets.googleapis.com/v4/spreadsheets/{quote(source.spreadsheet_id, safe='')}"
         metadata = self.request("GET", base, params={"fields": "sheets.properties"})
         title = next(
@@ -55,6 +105,22 @@ class Google:
         return self.request(
             "GET", base + "/values/" + quote(range_name, safe=""), params={"valueRenderOption": "FORMATTED_VALUE"}
         ).get("values", [])
+
+    def download_excel(self, file_url):
+        headers = {"Authorization": f"Bearer {self.access_token()}"}
+        with httpx.Client(timeout=60) as client:
+            with client.stream(
+                "GET", file_url, headers=headers, params={"alt": "media", "supportsAllDrives": "true"}
+            ) as response:
+                if response.is_error:
+                    response.read()
+                    response.raise_for_status()
+                content = bytearray()
+                for chunk in response.iter_bytes():
+                    if len(content) + len(chunk) > MAX_DOWNLOAD_BYTES:
+                        raise ValueError("The Excel timetable is too large to read safely (25 MB limit).")
+                    content.extend(chunk)
+                return bytes(content)
 
     def calendar(self, source):
         # A source-specific marker recovers a calendar created before a process crash.

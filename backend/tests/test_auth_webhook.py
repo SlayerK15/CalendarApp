@@ -203,3 +203,26 @@ def test_valid_callback_exchanges_code_and_ticket_then_rejects_replay(client, mo
     exchange = http.post("/api/auth/exchange", json={"ticket": ticket}, headers={"Origin": "http://localhost:3000"})
     assert exchange.status_code == 200
     assert http.get("/api/me").status_code == 200
+
+
+def test_excel_permission_error_exposes_reconnect_action(client, monkeypatch):
+    import app.main as main
+    from app.google import GooglePermissionRequired
+
+    http, db = client
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+
+    class MissingPermission:
+        def __init__(self, *args):
+            pass
+
+        def sheet(self, source):
+            raise GooglePermissionRequired("Reconnect Google to read this Excel timetable.")
+
+    monkeypatch.setattr(main, "Google", MissingPermission)
+    response = http.get("/api/options")
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "google_reconnect_required"
+    assert "Reconnect Google" in response.json()["detail"]["message"]
