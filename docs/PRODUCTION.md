@@ -26,15 +26,15 @@ Application secrets were sent directly from the ignored local `.env` to Render e
 - Frontend, API, and cron deployments report `live`.
 - Cron smoke test completed successfully; Render reports last success at `2026-09-08T22:17:38Z` (9 September in Asia/Kolkata).
 
-## Required Google OAuth correction
+## Google OAuth status
 
-Google currently returns **Error 400: redirect_uri_mismatch**. In Google Cloud Console → Google Auth Platform → Clients → the configured **Web application** OAuth client, add this exact **Authorized redirect URI**:
+The production callback is now accepted: a fresh login request reaches Google’s sign-in page. The configured **Authorized redirect URI** is:
 
 ```text
 https://livetimetable-api.onrender.com/api/auth/google/callback
 ```
 
-Save the client, allow configuration propagation, and sign in from the frontend URL above. The backend already sends this callback URI; changing the Render environment is not required. The Render API key cannot edit Google Cloud settings.
+Start login from the frontend’s **Connect with Google** button. Opening the callback URL directly or reusing an expired/consumed OAuth state cannot authenticate a user. The app redirects these requests to the sign-in page with a retry message; it continues to reject invalid state without exchanging Google codes. Google tokens stay backend-side.
 
 After login, confirm spreadsheet access and actual layout, programme/section selection, calendar creation, repeat sync without duplicates, modification/cancellation, and real Drive webhook delivery. No active timetable sources existed at deployment verification, so a cron smoke test checks execution and database access, not a real Google synchronization.
 

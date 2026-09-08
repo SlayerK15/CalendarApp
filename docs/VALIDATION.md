@@ -22,8 +22,12 @@ Validated locally and on Render on 9 September 2026. This record distinguishes t
 
 - The provided spreadsheet returned 401 to anonymous export. Confirm its real layout from an accessible Excel/CSV sample and adapt the parser if it is not the documented row format.
 - Configure Google Cloud OAuth and complete real login, refresh, Sheets read, Drive watch, and Calendar integration tests.
-- Render deployment is now live; see `PRODUCTION.md`. Google OAuth callback registration still needs correction before live Google integration checks can finish.
+- Render deployment is now live; see `PRODUCTION.md`. Google OAuth callback registration is accepted; completing sign-in is still required for live Google integration checks.
 - Run the full public-deployment checklist in `DEPLOYMENT.md`, including real modification/cancellation, repeated synchronization, webhook notification, and fallback cron checks.
 - Configure GitHub branch protection and verify Render/Vercel production deployment gates in the platform accounts.
 
 The landing-page calendar is illustrative sample content. Unit tests mock Google APIs; they are not evidence of a successful live Google sync. Two deprecation warnings from the installed Starlette test client do not affect test results.
+
+## OAuth recovery regression checks
+
+Missing, unknown, expired, and reused callback state redirect to the frontend without contacting Google or creating a session. A mocked successful Google callback still redeems its browser-bound ticket correctly; replay is rejected. Fresh production authorization requests reach Google’s sign-in page.

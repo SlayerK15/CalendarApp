@@ -7,7 +7,14 @@ import { api } from '@/lib/api';
 
 function AuthError() {
   const params = useSearchParams();
-  return params.has('auth') ? <div className="error" role="alert">Google sign-in was not completed. Please try again.</div> : null;
+  const reason = params.get('auth');
+  if (!reason) return null;
+  const message = reason === 'restart'
+    ? 'Start your sign-in here. Click Connect with Google to continue.'
+    : reason === 'expired'
+      ? 'That sign-in link is no longer valid. Click Connect with Google to start again.'
+      : 'Google sign-in was not completed. Click Connect with Google to try again.';
+  return <div className="error" role="alert">{message}</div>;
 }
 
 export default function Home() {

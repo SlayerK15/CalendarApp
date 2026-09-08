@@ -4,7 +4,7 @@ Next.js frontend, FastAPI backend, and PostgreSQL: connect a college timetable i
 
 ## Status
 
-The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and five-minute sync cron are configured. Google currently rejects the production callback with `redirect_uri_mismatch`; register the URI in [the production record](docs/PRODUCTION.md) before signing in. Real Google API acceptance checks still require a successful user login. The supplied spreadsheet returned HTTP 401 to an anonymous export, so its actual format is not yet verified. The current parser supports the documented [row contract](docs/SHEET_FORMAT.md); an Excel/CSV export is needed if the real timetable uses a different layout. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
+The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and five-minute sync cron are configured. Google now accepts the production callback; start login with **Connect with Google** on the live site. See [the production record](docs/PRODUCTION.md). Real Google API acceptance checks still require a successful user login. The supplied spreadsheet returned HTTP 401 to an anonymous export, so its actual format is not yet verified. The current parser supports the documented [row contract](docs/SHEET_FORMAT.md); an Excel/CSV export is needed if the real timetable uses a different layout. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
 
 ## Run locally
 

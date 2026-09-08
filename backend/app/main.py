@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import secrets
 import time
 import uuid
@@ -25,6 +26,8 @@ from app.models import AuthFlow, Event, Session, Source, SyncRun, User, Watch
 from app.parser import parse_sheet
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -142,9 +145,14 @@ def auth_start(response: Response, db: DBSession = Depends(get_db)):
 
 @app.get("/api/auth/google/callback")
 def auth_callback(state: str = "", code: str = "", error: str = "", db: DBSession = Depends(get_db)):
+    if not state:
+        logger.warning("oauth_callback_rejected reason=missing_state")
+        return RedirectResponse(settings().frontend_url + "/?auth=restart", status_code=303)
     flow = db.scalar(select(AuthFlow).where(AuthFlow.state == digest(state)).with_for_update())
     if not flow or flow.consumed or flow.expires_at < utcnow():
-        raise HTTPException(400, "Invalid or expired OAuth request")
+        reason = "unknown_state" if not flow else "reused_state" if flow.consumed else "expired_state"
+        logger.warning("oauth_callback_rejected reason=%s", reason)
+        return RedirectResponse(settings().frontend_url + "/?auth=expired", status_code=303)
     flow.consumed = True
     db.commit()
     if error or not code:
