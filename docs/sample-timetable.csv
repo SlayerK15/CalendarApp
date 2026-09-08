@@ -1,0 +1,5 @@
+id,programme,section,title,date,start_time,end_time,location,status
+btech-a-math-20260910,BTech,A,Mathematics II,2026-09-10,09:00,10:00,Room 101,scheduled
+btech-a-physics-20260910,BTech,A,Physics,2026-09-10,11:00,12:00,Lab 2,scheduled
+btech-b-math-20260910,BTech,B,Mathematics II,2026-09-10,10:00,11:00,Room 102,scheduled
+mba-a-econ-20260910,MBA,A,Economics,2026-09-10,09:00,10:00,Room 204,scheduled

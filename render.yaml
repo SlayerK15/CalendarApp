@@ -1,0 +1,118 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+services:
+  - type: web
+    name: livetimetable-api
+    runtime: python
+    rootDir: backend
+    plan: 0.5c-512mb
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:
+      - fromGroup: livetimetable-shared
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_WEBHOOK_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: livetimetable-db
+          property: connectionString
+  - type: cron
+    name: livetimetable-sync-cron
+    runtime: python
+    rootDir: backend
+    plan: 0.5c-512mb
+    region: singapore
+    schedule: '*/5 * * * *'
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.jobs.sync_all
+    autoDeployTrigger: checksPass
+    envVars:
+      - fromGroup: livetimetable-shared
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: FRONTEND_URL
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: BACKEND_URL
+      - key: ALLOWED_ORIGINS
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: ALLOWED_ORIGINS
+      - key: GOOGLE_CLIENT_ID
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: GOOGLE_CLIENT_ID
+      - key: GOOGLE_CLIENT_SECRET
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: GOOGLE_CLIENT_SECRET
+      - key: GOOGLE_REDIRECT_URI
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: GOOGLE_REDIRECT_URI
+      - key: GOOGLE_WEBHOOK_SECRET
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: GOOGLE_WEBHOOK_SECRET
+      - key: TOKEN_ENCRYPTION_KEY
+        fromService:
+          type: web
+          name: livetimetable-api
+          envVarKey: TOKEN_ENCRYPTION_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: livetimetable-db
+          property: connectionString
+
+databases:
+  - name: livetimetable-db
+    databaseName: livetimetable
+    user: livetimetable
+    plan: 0.1c-256mb
+    postgresMajorVersion: '16'
+    diskSizeGB: 5
+    region: singapore
+
+envVarGroups:
+  - name: livetimetable-shared
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.12
+      - key: ENVIRONMENT
+        value: production
+      - key: GOOGLE_SPREADSHEET_ID
+        value: 1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN
+      - key: GOOGLE_SHEET_GID
+        value: '129828207'
+      - key: SYNC_INTERVAL_SECONDS
+        value: '300'
+      - key: CANCELLED_EVENT_BEHAVIOUR
+        value: mark_cancelled
+      - key: TIMETABLE_TIMEZONE
+        value: Asia/Kolkata
