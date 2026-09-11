@@ -40,3 +40,5 @@ Missing, unknown, expired, and reused callback state redirect to the frontend wi
 ## 11 September 2026 operating changes
 
 Local checks pass for the six-hour scheduler, queued versus immediate webhook modes, paginated worker batches, failure isolation, per-user HTTP connection reuse, and frontend build. The GitHub wake workflow has no secrets or write permissions and requests only the frontend and API health endpoint. Public Google verification remains an external approval step; deployment of privacy/terms pages does not constitute Google approval.
+
+Release `17a414b` passed GitHub CI and is live on all three Render services. The wake workflow successfully checked both URLs. Backend-only runtime diagnostics returned `21600` seconds, queued change notifications, two workers, and a healthy MBA Analytics F source with 139 scheduled events. The production cron smoke run completed at `2026-09-11T14:04:50Z`. No target-user load test has been performed; capacity planning awaits the intended student count.
