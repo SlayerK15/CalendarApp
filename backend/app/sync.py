@@ -86,7 +86,8 @@ def sync_source(source_id):
             db.add(run)
             db.commit()
             try:
-                result = apply_sync(db, source, Google(db, db.get(User, source.user_id)))
+                with Google(db, db.get(User, source.user_id)) as google:
+                    result = apply_sync(db, source, google)
                 source.last_synced_at, source.last_error = utcnow(), None
                 run.status, run.message = result, "Reconciliation completed"
                 db.commit()

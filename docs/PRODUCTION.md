@@ -7,7 +7,7 @@ Deployed 9 September 2026 from `SlayerK15/CalendarApp`, branch `main`.
 | Frontend: CalendarApp | https://calendarapp-2r1h.onrender.com | Existing free Docker web service, `frontend` root |
 | API: livetimetable-api | https://livetimetable-api.onrender.com | Python web service, 0.5 CPU / 512 MB |
 | Database: livetimetable-db | dpg-dag8cd67bikc73945h80-a | PostgreSQL 16, 0.1 CPU / 256 MB, 5 GB |
-| Sync: livetimetable-sync-cron | crn-dag8huht0dsc73ecar8g | Python cron, 0.5 CPU / 512 MB, every five minutes |
+| Sync: livetimetable-sync-cron | crn-dag8huht0dsc73ecar8g | Python cron, 0.5 CPU / 512 MB, every six hours |
 
 All resources are in Singapore. The existing frontend, API, and database were reused. A missing cron was added. All three services have `autoDeployTrigger=checksPass`. `render-only.yaml` matches the existing frontend name and free plan to avoid creating a duplicate frontend or upgrading its plan on a future Blueprint sync.
 
@@ -41,3 +41,9 @@ Google sign-in and read-only Drive content consent have succeeded. Authenticated
 The real `Term-I` grid was validated inside Render on 9 September 2026: **878 unique event IDs, 823 scheduled entries, 55 cancellations**, with scheduled dates from 6 July to 18 September 2026. The worksheet also contains untimed holidays and exam-week banners through 27 September; those do not become invented timed events. Available sections are MBA A–D and MBA Analytics E–F. Strikethroughs, replacement classes, additional quizzes, explicit times and room overrides are handled; see `SHEET_FORMAT.md`.
 
 The source was still inactive during this validation. User programme/section selection, real calendar creation, repeat sync without duplicates, modification/cancellation propagation, and real Drive webhook delivery remain to be verified. The earlier cron smoke test checked execution and database access, not a real Google synchronization.
+
+## 11 September 2026 cadence and launch preparation
+
+The Render cron schedule is now `17 */6 * * *`. API and cron settings are `SYNC_INTERVAL_SECONDS=21600`, `SYNC_ON_CHANGE=false`, and `SYNC_MAX_WORKERS=2`. Drive notifications queue changes for scheduled reconciliation; initial connection and manual sync remain immediate. The frontend remains on its existing free plan. No hosting plan was upgraded.
+
+The repository includes a three-hour GitHub wake/health workflow, privacy and terms pages, and a Google verification guide. See `SCALING.md` and `GOOGLE_VERIFICATION.md` for operating limits and required Google Cloud owner actions.

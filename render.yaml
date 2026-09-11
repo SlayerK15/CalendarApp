@@ -39,7 +39,7 @@ services:
     rootDir: backend
     plan: 0.5c-512mb
     region: singapore
-    schedule: '*/5 * * * *'
+    schedule: '17 */6 * * *'
     buildCommand: pip install -r requirements.txt
     startCommand: python -m app.jobs.sync_all
     autoDeployTrigger: checksPass
@@ -111,7 +111,11 @@ envVarGroups:
       - key: GOOGLE_SHEET_GID
         value: '129828207'
       - key: SYNC_INTERVAL_SECONDS
-        value: '300'
+        value: '21600'
+      - key: SYNC_ON_CHANGE
+        value: 'false'
+      - key: SYNC_MAX_WORKERS
+        value: '2'
       - key: CANCELLED_EVENT_BEHAVIOUR
         value: mark_cancelled
       - key: TIMETABLE_TIMEZONE

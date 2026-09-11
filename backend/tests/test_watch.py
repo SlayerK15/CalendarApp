@@ -34,6 +34,12 @@ def test_renewal_respects_returned_expiry_and_skips_fresh_watch(monkeypatch):
         db.commit()
 
         class Google:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
             def __init__(self, *_):
                 pass
 

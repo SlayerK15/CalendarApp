@@ -16,6 +16,12 @@ ROW = ["math-001", "BTech", "A", "Mathematics", "2026-09-10", "09:00", "10:00", 
 
 
 class FakeGoogle:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
     def __init__(self):
         self.rows = [HEADER, ROW.copy()]
         self.calls = []

@@ -2,6 +2,7 @@ from functools import lru_cache
 
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -19,7 +20,9 @@ class Settings(BaseSettings):
     excel_sheet_name: str = ""
     google_webhook_secret: str = ""
     token_encryption_key: str = ""
-    sync_interval_seconds: int = 300
+    sync_interval_seconds: int = Field(default=21600, ge=60)
+    sync_on_change: bool = False
+    sync_max_workers: int = Field(default=2, ge=1, le=4)
     cancelled_event_behaviour: str = "mark_cancelled"
     timetable_timezone: str = "Asia/Kolkata"
 

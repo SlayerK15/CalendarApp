@@ -76,10 +76,13 @@ def test_ticket_is_browser_bound_single_use_and_session_http_only(client):
     assert http.get("/api/me").status_code == 401
 
 
-def test_webhook_rejects_forged_channel_and_resource(client, monkeypatch):
+@pytest.mark.parametrize("immediate", [False, True])
+def test_webhook_rejects_forged_channel_and_resource(client, monkeypatch, immediate):
     import app.main as main
 
     http, db = client
+    monkeypatch.setenv("SYNC_ON_CHANGE", str(immediate).lower())
+    settings.cache_clear()
     calls = []
     monkeypatch.setattr(main, "sync_source", lambda source: calls.append(source))
     db.add(Watch(channel_id="channel", source_id="s", resource_id="resource", expiration=utcnow() + timedelta(hours=1)))
@@ -94,7 +97,7 @@ def test_webhook_rejects_forged_channel_and_resource(client, monkeypatch):
     assert http.post("/api/webhooks/google-drive", headers=headers).status_code == 403
     headers["X-Goog-Resource-ID"] = "resource"
     assert http.post("/api/webhooks/google-drive", headers=headers).status_code == 202
-    assert calls == ["s"]
+    assert calls == (["s"] if immediate else [])
     assert db.get(Source, "s").pending
     db.get(Watch, "channel").expiration = utcnow() - timedelta(seconds=1)
     db.commit()
@@ -215,6 +218,12 @@ def test_excel_permission_error_exposes_reconnect_action(client, monkeypatch):
     http.cookies.set("lt_session", "signed-in")
 
     class MissingPermission:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
         def __init__(self, *args):
             pass
 

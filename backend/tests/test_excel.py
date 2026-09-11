@@ -112,3 +112,31 @@ def test_disabled_api_is_reported_actionably(google, monkeypatch):
     monkeypatch.setattr(google, "request", provider)
     with pytest.raises(ValueError, match="Enable the Google Drive API"):
         google.sheet(SimpleNamespace(spreadsheet_id="file", sheet_gid="42"))
+
+
+def test_google_reuses_connections_without_sharing_authorization(google, monkeypatch):
+    import time
+
+    original_client = httpx.Client
+    clients, authorization = [], []
+
+    def handle(request):
+        authorization.append(request.headers["authorization"])
+        return httpx.Response(200, json={"ok": True})
+
+    def client_factory(**kwargs):
+        client = original_client(transport=httpx.MockTransport(handle), **kwargs)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "Client", client_factory)
+    google.user.tokens = encrypt({"access_token": "test-first", "expires_at": time.time() + 3600})
+    with google:
+        google.request("GET", "https://www.googleapis.com/example")
+        google.request("GET", "https://www.googleapis.com/example")
+    other = SimpleNamespace(tokens=encrypt({"access_token": "test-second", "expires_at": time.time() + 3600}))
+    with Google(None, other) as second:
+        second.request("GET", "https://www.googleapis.com/example")
+    assert len(clients) == 2
+    assert all(client.is_closed for client in clients)
+    assert authorization == ["Bearer test-first", "Bearer test-first", "Bearer test-second"]

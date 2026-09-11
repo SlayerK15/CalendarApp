@@ -241,7 +241,8 @@ def me(user: User = Depends(current_user)):
 @app.get("/api/options")
 def options(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     try:
-        events = parse_sheet(Google(db, user).sheet(user_source(db, user)), settings().timetable_timezone)
+        with Google(db, user) as google:
+            events = parse_sheet(google.sheet(user_source(db, user)), settings().timetable_timezone)
     except GooglePermissionRequired as exc:
         raise HTTPException(403, {"message": str(exc), "code": "google_reconnect_required"}) from None
     except ValueError as exc:
@@ -315,6 +316,11 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
         "section": source.section,
         "active": source.active,
         "pending": source.pending,
+        "sync_interval_seconds": settings().sync_interval_seconds,
+        "sync_on_change": settings().sync_on_change,
+        "sync_in_progress": bool(
+            runs and runs[0].status == "running" and runs[0].started_at > utcnow() - timedelta(minutes=30)
+        ),
         "calendar_id": source.calendar_id,
         "last_synced_at": source.last_synced_at.isoformat() + "Z" if source.last_synced_at else None,
         "last_error": source.last_error,
@@ -350,5 +356,6 @@ def webhook(request: Request, tasks: BackgroundTasks, db: DBSession = Depends(ge
     source = db.get(Source, watch.source_id)
     source.pending = True
     db.commit()
-    tasks.add_task(sync_source, source.id)
+    if settings().sync_on_change:
+        tasks.add_task(sync_source, source.id)
     return {"status": "accepted"}

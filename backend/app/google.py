@@ -1,4 +1,5 @@
 import time
+from contextlib import contextmanager
 from urllib.parse import quote
 
 import httpx
@@ -18,11 +19,30 @@ class GooglePermissionRequired(ValueError):
 class Google:
     def __init__(self, db, user):
         self.db, self.user = db, user
+        self._client = None
+
+    def __enter__(self):
+        self._client = httpx.Client(timeout=30)
+        return self
+
+    def __exit__(self, *_):
+        self._client.close()
+        self._client = None
+
+    @contextmanager
+    def http(self):
+        # Reuse TCP/TLS connections throughout each user's reconciliation.
+        # Authorization remains a per-request header, never shared between users.
+        if self._client is not None:
+            yield self._client
+        else:
+            with httpx.Client(timeout=30) as client:
+                yield client
 
     def access_token(self):
         token = decrypt(self.user.tokens)
         if token.get("expires_at", 0) < time.time() + 90:
-            with httpx.Client(timeout=30) as client:
+            with self.http() as client:
                 response = client.post(
                     "https://oauth2.googleapis.com/token",
                     data={
@@ -41,7 +61,7 @@ class Google:
         return token["access_token"]
 
     def request(self, method, url, **kwargs):
-        with httpx.Client(timeout=30) as client:
+        with self.http() as client:
             response = client.request(method, url, headers={"Authorization": f"Bearer {self.access_token()}"}, **kwargs)
         response.raise_for_status()
         return response.json() if response.content else {}
@@ -108,9 +128,9 @@ class Google:
 
     def download_excel(self, file_url):
         headers = {"Authorization": f"Bearer {self.access_token()}"}
-        with httpx.Client(timeout=60) as client:
+        with self.http() as client:
             with client.stream(
-                "GET", file_url, headers=headers, params={"alt": "media", "supportsAllDrives": "true"}
+                "GET", file_url, headers=headers, params={"alt": "media", "supportsAllDrives": "true"}, timeout=60
             ) as response:
                 if response.is_error:
                     response.read()

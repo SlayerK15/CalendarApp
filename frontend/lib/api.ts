@@ -12,4 +12,4 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   return value;
 }
 export type TimetableEvent = {id: string; summary: string; location: string; description: string; cancelled: boolean; start: {dateTime: string}; end: {dateTime: string}};
-export type Dashboard = {programme: string; section: string; active: boolean; pending: boolean; calendar_id: string | null; last_synced_at: string | null; last_error: string | null; event_count: number; watch_active: boolean; events: TimetableEvent[]; runs: {status: string; message: string; at: string}[]};
+export type Dashboard = {programme: string; section: string; active: boolean; pending: boolean; sync_interval_seconds: number; sync_on_change: boolean; sync_in_progress: boolean; calendar_id: string | null; last_synced_at: string | null; last_error: string | null; event_count: number; watch_active: boolean; events: TimetableEvent[]; runs: {status: string; message: string; at: string}[]};

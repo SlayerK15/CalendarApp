@@ -7,7 +7,7 @@ Validated locally and on Render on 9 September 2026. This record distinguishes t
 - Frontend ESLint, TypeScript type checking, and Next.js 16.3.4 production build.
 - Desktop (1440px) and mobile (390px) browser render checks: no JavaScript errors or horizontal overflow.
 - Both Docker images build successfully; Compose starts frontend, API, and PostgreSQL.
-- Backend suite: **40 tests pass locally**, with the PostgreSQL locking integration test skipped locally and configured to run in CI. The earlier 12-test baseline also passed inside the Python 3.12 Docker image with PostgreSQL 16.
+- Backend suite: **44 tests pass locally**, with the PostgreSQL locking integration test skipped locally and configured to run in CI. The earlier 12-test baseline also passed inside the Python 3.12 Docker image with PostgreSQL 16.
 - Stable event IDs across room changes, cancellation/restoration, repeated sync, and simulated crash after Google write.
 - Failed sheet parsing and failed calendar writes do not advance successful fingerprints or trigger cancellation from missing input.
 - Missing classes are marked cancelled; suspicious event-count drops abort.
@@ -36,3 +36,7 @@ The landing-page calendar is illustrative sample content. Unit tests mock Google
 ## OAuth recovery regression checks
 
 Missing, unknown, expired, and reused callback state redirect to the frontend without contacting Google or creating a session. A mocked successful Google callback still redeems its browser-bound ticket correctly; replay is rejected. Fresh production authorization requests reach Google’s sign-in page.
+
+## 11 September 2026 operating changes
+
+Local checks pass for the six-hour scheduler, queued versus immediate webhook modes, paginated worker batches, failure isolation, per-user HTTP connection reuse, and frontend build. The GitHub wake workflow has no secrets or write permissions and requests only the frontend and API health endpoint. Public Google verification remains an external approval step; deployment of privacy/terms pages does not constitute Google approval.

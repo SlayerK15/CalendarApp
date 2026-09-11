@@ -39,7 +39,7 @@ Google Drive watch configuration is an API call performed by the app, not a Goog
 3. Review the resources before creation:
    - `livetimetable-api`: Python Web Service, 0.5 CPU/512 MB.
    - `livetimetable-db`: PostgreSQL 16, 0.1 CPU/256 MB, 5 GB disk.
-   - `livetimetable-sync-cron`: Python Cron, 0.5 CPU/512 MB, every five minutes.
+   - `livetimetable-sync-cron`: Python Cron, 0.5 CPU/512 MB, every six hours.
 4. Enter the prompted backend variables. The cron references the same values from the API service; do not generate different token-encryption keys for the two processes.
 5. Render supplies `DATABASE_URL` from PostgreSQL and `PORT` to the web process. Build installs `requirements.txt`; pre-deploy runs `alembic upgrade head`; start uses `uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`.
 6. Find the assigned public API URL at the top of the Web Service dashboard. If its name differs from your intended URL, update `BACKEND_URL` and `GOOGLE_REDIRECT_URI`, and the Google OAuth redirect registration. The API will reject incomplete production configuration until valid values are set.
@@ -66,7 +66,9 @@ The Blueprint uses current plan IDs and service-level secret prompts; Render doe
 | EXCEL_SHEET_NAME | Exact Excel worksheet name when the workbook has multiple tabs |
 | GOOGLE_WEBHOOK_SECRET | Random high-entropy string, shared by API and cron |
 | TOKEN_ENCRYPTION_KEY | Fernet key, shared by API and cron |
-| SYNC_INTERVAL_SECONDS | 300 (keep Blueprint cron cadence aligned) |
+| SYNC_INTERVAL_SECONDS | 21600 (keep Blueprint cron cadence aligned) |
+| SYNC_ON_CHANGE | false; queue Drive changes for the scheduled run |
+| SYNC_MAX_WORKERS | 2; bounded concurrent user reconciliations |
 | CANCELLED_EVENT_BEHAVIOUR | mark_cancelled (default) or delete |
 | TIMETABLE_TIMEZONE | Asia/Kolkata |
 
@@ -81,7 +83,7 @@ Save the outputs directly in Render settings. Do not paste them into GitHub, log
 
 ### Manual Render equivalent
 
-Create PostgreSQL and a Python Web Service in the same region; set root directory `backend`, build `pip install -r requirements.txt`, pre-deploy `alembic upgrade head`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`, and health `/health`. Copy the database internal URL into `DATABASE_URL` and set the table above. Create a Cron Job with the same root/build/environment and start `python -m app.jobs.sync_all`, schedule `*/5 * * * *`.
+Create PostgreSQL and a Python Web Service in the same region; set root directory `backend`, build `pip install -r requirements.txt`, pre-deploy `alembic upgrade head`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`, and health `/health`. Copy the database internal URL into `DATABASE_URL` and set the table above. Create a Cron Job with the same root/build/environment and start `python -m app.jobs.sync_all`, schedule `17 */6 * * *`.
 
 To apply migrations explicitly from the backend directory with `DATABASE_URL` configured:
 
@@ -189,3 +191,5 @@ The API still prompts for its frontend origin, backend URL, OAuth callback, and 
 For agent-assisted provisioning, place a Render API key in the ignored root `.env` as `RENDER_API_KEY=...`; do not send it in chat or commit it. Create the key in Render Account Settings. `RENDER_OWNER_ID` can optionally select a specific workspace when the account has more than one. These are deployment credentials, not application environment values, and must not be copied to the frontend or application services.
 
 Excel files need Drive content access. Existing metadata-only Google connections show a **Reconnect Google** action to request the read-only content scope. Drive `files.watch` continues to detect changes to the original Excel file; no converted copy is created. Public OAuth verification must cover the requested Drive scope.
+
+For Google public launch, use [GOOGLE_VERIFICATION.md](GOOGLE_VERIFICATION.md). For the six-hour cadence, bounded workers and three-hour GitHub wake-up workflow, use [SCALING.md](SCALING.md).

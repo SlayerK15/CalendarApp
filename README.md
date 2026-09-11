@@ -4,7 +4,7 @@ Next.js frontend, FastAPI backend, and PostgreSQL: connect a college timetable i
 
 ## Status
 
-The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and five-minute sync cron are configured. Google sign-in and authenticated access to the supplied Excel workbook work. The college grid adapter was validated inside the backend against the real `Term-I` worksheet: 823 scheduled entries and 55 cancellations across MBA A–D and MBA Analytics E–F. See [the input formats](docs/SHEET_FORMAT.md) and [the production record](docs/PRODUCTION.md). Selecting a programme and section starts calendar synchronization. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
+The application is deployed on Render: [open LiveTimetable](https://calendarapp-2r1h.onrender.com). The API, PostgreSQL database, and six-hour sync cron are configured. Google sign-in and authenticated access to the supplied Excel workbook work. The college grid adapter was validated inside the backend against the real `Term-I` worksheet: 823 scheduled entries and 55 cancellations across MBA A–D and MBA Analytics E–F. See [the input formats](docs/SHEET_FORMAT.md) and [the production record](docs/PRODUCTION.md). Selecting a programme and section starts calendar synchronization. Landing-page sample classes are explicitly illustrative, never shown as a user's real timetable.
 
 ## Run locally
 
@@ -34,7 +34,7 @@ Run fallback reconciliation locally:
 docker compose --profile jobs run --rm sync
 ```
 
-Localhost cannot receive Google push notifications. Use manual sync or run the job; production registers an HTTPS webhook automatically. `SYNC_INTERVAL_SECONDS=300` documents the desired interval; the actual production schedule is `*/5 * * * *` in `render.yaml`. Update both if changing cadence. No polling loop runs inside FastAPI.
+Localhost cannot receive Google push notifications. Use manual sync or run the job; production registers an HTTPS webhook automatically. `SYNC_INTERVAL_SECONDS=21600` controls the displayed interval; the actual production schedule is `17 */6 * * *` in `render.yaml`. Update both if changing cadence. No polling loop runs inside FastAPI.
 
 ## Develop without containers
 
@@ -87,7 +87,7 @@ Follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The repository includes `render
 - The browser calls same-origin Next.js `/api/*`. Its narrowly allowlisted server proxy uses `NEXT_PUBLIC_API_URL` to reach FastAPI. This preserves first-party HttpOnly cookies on unrelated Vercel/Render domains.
 - OAuth callback remains on FastAPI at `GOOGLE_REDIRECT_URI`. A single-use, two-minute application ticket in the URL fragment is redeemed with the initiating browser's HttpOnly binding cookie. No Google tokens reach frontend JavaScript.
 - PostgreSQL stores encrypted Google credentials, OAuth state, hashed app sessions, source configuration, watch subscriptions, event mappings, and sync logs.
-- Google Drive notifications persist pending work and return 202 before background processing. PostgreSQL advisory locks serialize operations per source. A five-minute cron reconciles all active sources, recovering interrupted or lost background tasks.
+- Google Drive notifications persist pending work for the next scheduled run and return 202. Initial connection and manual synchronization remain immediate. PostgreSQL advisory locks serialize operations per source. A six-hour cron reconciles all active sources, recovering interrupted or lost background tasks.
 - A source is currently one user's selected programme/section. Multiple users viewing the same spreadsheet have independent calendars and locks. This MVP fetches the sheet per user; parser and sync services can later be reused behind a shared-source queue/worker.
 - Canonical fingerprints skip unchanged schedules. Stable Google event IDs make retries safe even after a remote write succeeds and the process crashes. Removed rows default to a `[CANCELLED]` title and transparent busy status. Explicit `delete` mode deletes instead.
 - Parsing/fetch failures do not cancel events. Calendar failures do not advance the fingerprint or success timestamp. Successful individual event writes are committed so retries resume safely; multi-event updates are eventually consistent, not an atomic Google transaction.
@@ -95,3 +95,7 @@ Follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The repository includes `render
 - Logs older than 30 days, expired sessions, and OAuth flows are pruned by cron. App tokens remain backend-side, Fernet encrypted. Keep the encryption key stable and backed up securely.
 
 No Redis, Celery, Kubernetes, persistent app disk, or additional worker is required.
+
+## Operating cadence and public launch
+
+Automatic sync now runs every six hours; Drive changes queue for that run. A GitHub workflow wakes the frontend and checks API health every three hours. See [scaling and operating limits](docs/SCALING.md). Privacy and terms pages are available at `/privacy` and `/terms`. Google public publishing and verification still require project-owner action and Google approval; see [the prepared verification guide](docs/GOOGLE_VERIFICATION.md).
