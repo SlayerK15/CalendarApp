@@ -99,3 +99,10 @@ No Redis, Celery, Kubernetes, persistent app disk, or additional worker is requi
 ## Operating cadence and public launch
 
 Automatic sync now runs every six hours; Drive changes queue for that run. A GitHub workflow wakes the frontend and checks API health every three hours. See [scaling and operating limits](docs/SCALING.md). Privacy and terms pages are available at `/privacy` and `/terms`. Google public publishing and verification still require project-owner action and Google approval; see [the prepared verification guide](docs/GOOGLE_VERIFICATION.md).
+
+## Timetable sources
+
+- [Original timetable](https://docs.google.com/spreadsheets/d/1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN/edit?gid=129828207) — current source.
+- [Second timetable](https://docs.google.com/spreadsheets/d/14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt/edit?gid=129828207) — added on 16 September; pending account access and parser validation.
+
+Both can feed the same calendar without replacing existing class IDs. See [multiple-file configuration](docs/SHEET_FORMAT.md#multiple-timetable-files). The six-hour sync schedule is unchanged.

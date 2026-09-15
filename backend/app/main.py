@@ -23,7 +23,7 @@ from app.google import Google, GooglePermissionRequired
 from app.jobs.renew_google_watch import renew_source
 from app.locks import source_lock
 from app.models import AuthFlow, Event, Session, Source, SyncRun, User, Watch
-from app.parser import parse_sheet
+from app.timetables import read_timetables, source_listing
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
 
@@ -242,7 +242,7 @@ def me(user: User = Depends(current_user)):
 def options(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     try:
         with Google(db, user) as google:
-            events = parse_sheet(google.sheet(user_source(db, user)), settings().timetable_timezone)
+            events = read_timetables(google, user_source(db, user))
     except GooglePermissionRequired as exc:
         raise HTTPException(403, {"message": str(exc), "code": "google_reconnect_required"}) from None
     except ValueError as exc:
@@ -313,6 +313,7 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
     )
     return {
         "programme": source.programme,
+        "timetables": source_listing(source),
         "section": source.section,
         "active": source.active,
         "pending": source.pending,

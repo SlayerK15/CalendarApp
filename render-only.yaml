@@ -129,6 +129,8 @@ envVarGroups:
     value: 1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN
   - key: GOOGLE_SHEET_GID
     value: '129828207'
+  - key: ADDITIONAL_TIMETABLES
+    value: '[{"spreadsheet_id":"14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt","sheet_gid":"129828207","label":"Second timetable","enabled":false}]'
   - key: SYNC_INTERVAL_SECONDS
     value: '21600'
   - key: SYNC_ON_CHANGE

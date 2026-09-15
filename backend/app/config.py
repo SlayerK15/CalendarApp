@@ -2,7 +2,14 @@ from functools import lru_cache
 
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+
+class AdditionalTimetable(BaseModel):
+    spreadsheet_id: str = Field(min_length=1)
+    sheet_gid: str = "0"
+    label: str = "Additional timetable"
+    enabled: bool = True
 
 
 class Settings(BaseSettings):
@@ -18,6 +25,7 @@ class Settings(BaseSettings):
     google_spreadsheet_id: str = "1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN"
     google_sheet_gid: str = "129828207"
     excel_sheet_name: str = ""
+    additional_timetables: list[AdditionalTimetable] = Field(default_factory=list)
     google_webhook_secret: str = ""
     token_encryption_key: str = ""
     sync_interval_seconds: int = Field(default=21600, ge=60)

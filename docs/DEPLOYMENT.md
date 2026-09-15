@@ -63,6 +63,7 @@ The Blueprint uses current plan IDs and service-level secret prompts; Render doe
 | GOOGLE_REDIRECT_URI | `https://<your-api>.onrender.com/api/auth/google/callback` |
 | GOOGLE_SPREADSHEET_ID | `1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN` |
 | GOOGLE_SHEET_GID | `129828207` (native Google Sheets only) |
+| ADDITIONAL_TIMETABLES | JSON list of additional spreadsheet IDs, tab IDs, labels and enabled flags; set on API and cron |
 | EXCEL_SHEET_NAME | Exact Excel worksheet name when the workbook has multiple tabs |
 | GOOGLE_WEBHOOK_SECRET | Random high-entropy string, shared by API and cron |
 | TOKEN_ENCRYPTION_KEY | Fernet key, shared by API and cron |

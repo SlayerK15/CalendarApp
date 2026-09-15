@@ -47,3 +47,13 @@ Excel `.xlsx` files are read in memory with openpyxl (cached formula values, ric
 For a workbook with one worksheet, that worksheet is used. For multiple worksheets, configure the exact `EXCEL_SHEET_NAME` on the API and cron; the app does not guess which tab is the timetable. Google’s Office-editor `gid` is not an Excel worksheet identifier. Native Google Sheets continues to use `GOOGLE_SHEET_GID`. Typed Excel dates and times normalize to the parser’s date/time contract.
 
 Existing users who granted only `drive.metadata.readonly` must use **Reconnect Google** on the dashboard and consent to `drive.readonly`. This allows downloading Drive file content; the app reads the configured timetable.
+
+## Multiple timetable files
+
+The original timetable remains configured with `GOOGLE_SPREADSHEET_ID` and `GOOGLE_SHEET_GID`. `ADDITIONAL_TIMETABLES` is a JSON array of objects with `spreadsheet_id`, `sheet_gid`, `label`, and `enabled`. Enabled files use the same signed-in Google account and programme/section selection; their classes are combined in the existing College Timetable calendar.
+
+The second supplied link is [Second timetable](https://docs.google.com/spreadsheets/d/14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt/edit?gid=129828207). It is registered with `enabled: false` pending Google-account access and format validation. The connected account's Drive API returned 404; the new account named by the user was not yet connected at the access check. The file does not need to be public, but the account used for syncing must be able to read both files.
+
+The dashboard lists the original and additional files, including pending ones. Additional classes receive file-specific hashed IDs so equal session labels in different workbooks cannot overwrite one another. The original event IDs remain unchanged. Additional files are read during the six-hour reconciliation and manual sync; the existing Drive watch remains on the original file.
+
+All enabled files must read and parse successfully before calendar writes begin. Removal guards run independently per file, so adding many new events in one file cannot hide a suspicious loss in another. Disabling or removing a file whose entries were already imported pauses sync rather than cancelling those entries. Make deliberate source-removal changes separately.
