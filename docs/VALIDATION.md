@@ -42,3 +42,9 @@ Missing, unknown, expired, and reused callback state redirect to the frontend wi
 Local checks pass for the six-hour scheduler, queued versus immediate webhook modes, paginated worker batches, failure isolation, per-user HTTP connection reuse, and frontend build. The GitHub wake workflow has no secrets or write permissions and requests only the frontend and API health endpoint. Public Google verification remains an external approval step; deployment of privacy/terms pages does not constitute Google approval.
 
 Release `17a414b` passed GitHub CI and is live on all three Render services. The wake workflow successfully checked both URLs. Backend-only runtime diagnostics returned `21600` seconds, queued change notifications, two workers, and a healthy MBA Analytics F source with 139 scheduled events. The production cron smoke run completed at `2026-09-11T14:04:50Z`. No target-user load test has been performed; capacity planning awaits the intended student count.
+
+## 16 September 2026 additional timetable
+
+Release `faeb64b` passed CI and deployed to the frontend, API and cron. Local checks: 50 backend tests passed, one PostgreSQL integration test skipped locally, and frontend lint/type-check/build passed. Additional-source tests cover distinct stable IDs for matching class labels, pending files, duplicate configuration, read failures, per-file removal guards and protection against disabling an imported file.
+
+Production diagnostics confirmed the original MBA Analytics F subscription is active with no sync error and the six-hour cadence intact. Both URLs are listed in the deployed dashboard data. The second file is registered but disabled: the connected account received a Drive API 404, and the college account supplied for access had not yet connected. Its workbook layout and calendar import remain unverified pending that account's Google sign-in. Home and both API health endpoints returned HTTP 200.
