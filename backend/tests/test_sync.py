@@ -199,3 +199,72 @@ def test_postgres_lock_excludes_second_connection(monkeypatch):
     with locks.source_lock(key) as third:
         assert third
     engine.dispose()
+
+
+def test_reconnect_preserves_events_and_resumes_same_calendar(db, monkeypatch):
+    import app.sync as sync
+    from app.google import GooglePermissionRequired
+
+    @contextmanager
+    def locked(_):
+        yield True
+
+    @contextmanager
+    def session():
+        yield db
+
+    google = FakeGoogle()
+    monkeypatch.setattr(sync, "source_lock", locked)
+    monkeypatch.setattr(sync, "SessionLocal", session)
+    monkeypatch.setattr(sync, "Google", lambda *_: google)
+    assert sync.sync_source("source") == "success"
+    source = db.get(Source, "source")
+    original = (source.fingerprint, source.last_synced_at, source.calendar_id)
+    event_ids = list(db.scalars(select(Event.id)))
+    reader = google.sheet
+
+    def expired(_):
+        raise GooglePermissionRequired("Reconnect Google to resume timetable sync.")
+
+    google.sheet = expired
+    assert sync.sync_source("source") == "reconnect_required"
+    assert (source.fingerprint, source.last_synced_at, source.calendar_id) == original
+    assert list(db.scalars(select(Event.id))) == event_ids
+    assert "Reconnect Google" in source.last_error
+    assert db.scalar(select(SyncRun).where(SyncRun.status == "reconnect_required"))
+    google.sheet = reader
+    assert sync.sync_source("source") == "unchanged"
+    assert source.last_error is None
+    assert list(db.scalars(select(Event.id))) == event_ids
+
+
+def test_second_only_switch_preserves_primary_history_without_fetching_it(db, monkeypatch):
+    from app.config import settings
+
+    source, google = db.get(Source, "source"), FakeGoogle()
+    apply_sync(db, source, google)
+    db.commit()
+    old_id = google.calls[0][0]
+    monkeypatch.setenv("PRIMARY_TIMETABLE_ENABLED", "false")
+    monkeypatch.setenv("ADDITIONAL_TIMETABLES", '[{"spreadsheet_id":"second","sheet_gid":"42"}]')
+    settings.cache_clear()
+    calls = []
+
+    def sheet(item):
+        calls.append(item.spreadsheet_id)
+        assert item.spreadsheet_id == "second"
+        return [HEADER, ROW.copy()]
+
+    google.sheet = sheet
+    try:
+        apply_sync(db, source, google)
+        db.commit()
+        assert calls == ["second"]
+        assert len(google.calls) == 2
+        assert google.calls[1][0] != old_id
+        assert not db.get(Event, old_id).cancelled
+        assert source.event_count == 1
+        assert source.calendar_id == "calendar-1"
+        assert apply_sync(db, source, google) == "unchanged"
+    finally:
+        settings.cache_clear()

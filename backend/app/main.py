@@ -23,7 +23,7 @@ from app.google import Google, GooglePermissionRequired
 from app.jobs.renew_google_watch import renew_source
 from app.locks import source_lock
 from app.models import AuthFlow, Event, Session, Source, SyncRun, User, Watch
-from app.timetables import read_timetables, source_listing
+from app.timetables import managed_event, read_timetables, source_listing
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
 
@@ -261,7 +261,8 @@ class Selection(BaseModel):
 
 
 def reconcile(source_id):
-    sync_source(source_id)
+    if sync_source(source_id) == "reconnect_required":
+        return
     try:
         renew_source(source_id)
     except Exception:
@@ -300,7 +301,7 @@ def manual_sync(tasks: BackgroundTasks, user: User = Depends(current_user), db: 
 @app.get("/api/dashboard")
 def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     source = user_source(db, user)
-    events = list(db.scalars(select(Event).where(Event.source_id == source.id)))
+    events = [e for e in db.scalars(select(Event).where(Event.source_id == source.id)) if managed_event(e.row_id)]
     runs = list(
         db.scalars(select(SyncRun).where(SyncRun.source_id == source.id).order_by(SyncRun.started_at.desc()).limit(10))
     )
@@ -325,8 +326,9 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
         "calendar_id": source.calendar_id,
         "last_synced_at": source.last_synced_at.isoformat() + "Z" if source.last_synced_at else None,
         "last_error": source.last_error,
-        "event_count": source.event_count,
-        "watch_active": bool(watches),
+        "google_reconnect_required": bool(runs and runs[0].status == "reconnect_required"),
+        "event_count": sum(not event.cancelled for event in events),
+        "watch_active": settings().primary_timetable_enabled and bool(watches),
         "events": [
             {"id": e.row_id, **e.payload, "cancelled": e.cancelled}
             for e in sorted(events, key=lambda e: e.payload["start"]["dateTime"])
@@ -355,6 +357,8 @@ def webhook(request: Request, tasks: BackgroundTasks, db: DBSession = Depends(ge
     if not watch.resource_id and state != "sync":
         raise HTTPException(409, "Watch registration in progress")
     source = db.get(Source, watch.source_id)
+    if not settings().primary_timetable_enabled:
+        return {"status": "ignored"}
     source.pending = True
     db.commit()
     if settings().sync_on_change:

@@ -102,7 +102,8 @@ Automatic sync now runs every six hours; Drive changes queue for that run. A Git
 
 ## Timetable sources
 
-- [Original timetable](https://docs.google.com/spreadsheets/d/1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN/edit?gid=129828207) — current source.
-- [Second timetable](https://docs.google.com/spreadsheets/d/14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt/edit?gid=129828207) — added on 16 September; pending account access and parser validation.
+[Term 2 timetable](https://docs.google.com/spreadsheets/d/14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt/edit?gid=129828207) is the only active file. `PRIMARY_TIMETABLE_ENABLED=false` retires Sheet 1; `ADDITIONAL_TIMETABLES` enables Sheet 2. The original source identifier remains as an internal identity anchor for existing subscriptions and calendar history.
 
-Both can feed the same calendar without replacing existing class IDs. See [multiple-file configuration](docs/SHEET_FORMAT.md#multiple-timetable-files). The six-hour sync schedule is unchanged.
+The dashboard and scheduled/manual sync use only Sheet 2. Existing Sheet 1 calendar entries remain as history and are no longer reconciled. Sheet 2 keeps its file-specific event IDs. Its classes appear after a successful sync with Google authorization that can read that file. The six-hour schedule is unchanged; watches on the retired file are no longer renewed.
+
+See [timetable configuration](docs/SHEET_FORMAT.md#multiple-timetable-files).

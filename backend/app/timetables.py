@@ -23,7 +23,7 @@ def additional_for(source, include_disabled=False):
 
 
 def source_listing(source):
-    files = [(source, "Original timetable", True)] + [
+    files = ([(source, "Original timetable", True)] if settings().primary_timetable_enabled else []) + [
         (item, item.label, item.enabled) for item in additional_for(source, include_disabled=True)
     ]
     return [
@@ -38,7 +38,7 @@ def source_listing(source):
 
 def read_timetables(google, source):
     # Validate every enabled file before making any Google Calendar writes.
-    events = parse_sheet(google.sheet(source), settings().timetable_timezone)
+    events = parse_sheet(google.sheet(source), settings().timetable_timezone) if settings().primary_timetable_enabled else []
     for item in additional_for(source):
         incoming = parse_sheet(google.sheet(item), settings().timetable_timezone)
         prefix = timetable_prefix(item)
@@ -47,7 +47,14 @@ def read_timetables(google, source):
             link = f"https://docs.google.com/spreadsheets/d/{item.spreadsheet_id}/edit?gid={item.sheet_gid}"
             event["payload"]["description"] += f"\n\n{item.label}: {link}"
         events.extend(incoming)
+    if not events:
+        raise ValueError("No enabled timetable contains classes; synchronization paused")
     return events
+
+
+def managed_event(row_id):
+    # Retired primary events remain as calendar history, outside reconciliation.
+    return settings().primary_timetable_enabled or row_id.startswith("external:")
 
 
 def guard_timetable_removals(source, existing, selected):
@@ -60,7 +67,8 @@ def guard_timetable_removals(source, existing, selected):
 
     if any(group(row_id) == "unconfigured" for row_id in existing):
         raise ValueError("An imported timetable is disabled or removed. Sync is paused to protect its events.")
-    for name in ["primary", *prefixes]:
+    groups = (["primary"] if settings().primary_timetable_enabled else []) + prefixes
+    for name in groups:
         previous = sum(not event.cancelled and group(row_id) == name for row_id, event in existing.items())
         current = sum(group(event["row_id"]) == name for event in selected)
         guard_removals(previous, current)

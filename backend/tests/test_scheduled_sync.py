@@ -51,3 +51,13 @@ def test_one_failed_user_does_not_skip_watch_renewal(monkeypatch):
     monkeypatch.setattr(job, "renew_source", lambda source_id: calls.append(source_id))
     assert job.reconcile_one("source")
     assert calls == ["source"]
+
+
+def test_expired_authorization_keeps_job_failed_without_duplicate_refresh(monkeypatch):
+    import app.jobs.sync_all as job
+
+    monkeypatch.setattr(job, "sync_source", lambda _: "reconnect_required")
+    calls = []
+    monkeypatch.setattr(job, "renew_source", lambda source_id: calls.append(source_id))
+    assert job.reconcile_one("source")
+    assert calls == []

@@ -7,11 +7,11 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.db import SessionLocal
-from app.google import Google
+from app.google import Google, GooglePermissionRequired
 from app.locks import source_lock
 from app.models import Event, Source, SyncRun, User
 from app.parser import fingerprint
-from app.timetables import guard_timetable_removals, read_timetables
+from app.timetables import guard_timetable_removals, managed_event, read_timetables
 from app.security import digest
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,9 @@ def utcnow():
 def apply_sync(db, source, google):
     parsed = read_timetables(google, source)
     selected = [e for e in parsed if e["programme"] == source.programme and e["section"] == source.section]
-    existing = {e.row_id: e for e in db.scalars(select(Event).where(Event.source_id == source.id))}
+    existing = {
+        e.row_id: e for e in db.scalars(select(Event).where(Event.source_id == source.id)) if managed_event(e.row_id)
+    }
     guard_timetable_removals(source, existing, selected)
     current_fingerprint = fingerprint(selected)
     if source.fingerprint == current_fingerprint:
@@ -103,7 +105,8 @@ def sync_source(source_id):
                     else f"{type(exc).__name__}: synchronization failed; retry scheduled"
                 )
                 source.last_error, source.pending = message, True
-                run.status, run.message = "failed", message
+                result = "reconnect_required" if isinstance(exc, GooglePermissionRequired) else "failed"
+                run.status, run.message = result, message
                 db.commit()
-                logger.warning("sync source=%s status=failed type=%s", source_id, type(exc).__name__)
-                return "failed"
+                logger.warning("sync source=%s status=%s type=%s", source_id, result, type(exc).__name__)
+                return result

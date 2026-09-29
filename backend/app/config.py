@@ -10,6 +10,7 @@ class AdditionalTimetable(BaseModel):
     sheet_gid: str = "0"
     label: str = "Additional timetable"
     enabled: bool = True
+    excel_sheet_name: str | None = None
 
 
 class Settings(BaseSettings):
@@ -24,6 +25,7 @@ class Settings(BaseSettings):
     google_redirect_uri: str = ""
     google_spreadsheet_id: str = "1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN"
     google_sheet_gid: str = "129828207"
+    primary_timetable_enabled: bool = True
     excel_sheet_name: str = ""
     additional_timetables: list[AdditionalTimetable] = Field(default_factory=list)
     google_webhook_secret: str = ""
@@ -43,6 +45,8 @@ class Settings(BaseSettings):
         return [s.strip() for s in self.allowed_origins.split(",") if s.strip()]
 
     def validate_runtime(self):
+        if not self.primary_timetable_enabled and not any(item.enabled for item in self.additional_timetables):
+            raise ValueError("Enable at least one timetable before retiring the primary timetable")
         if self.cancelled_event_behaviour not in {"mark_cancelled", "delete"}:
             raise ValueError("CANCELLED_EVENT_BEHAVIOUR must be mark_cancelled or delete")
         if self.production:

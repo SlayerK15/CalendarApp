@@ -10,6 +10,22 @@ from app.models import Source, User, Watch
 from app.sync import utcnow
 
 
+def test_retired_primary_does_not_register_or_renew_watches(monkeypatch):
+    import app.jobs.renew_google_watch as job
+
+    monkeypatch.setenv("PRIMARY_TIMETABLE_ENABLED", "false")
+    settings.cache_clear()
+
+    def unexpected_session():
+        raise AssertionError("Retired files must not create watch work")
+
+    monkeypatch.setattr(job, "SessionLocal", unexpected_session)
+    try:
+        job.renew_source("s")
+    finally:
+        settings.cache_clear()
+
+
 def test_renewal_respects_returned_expiry_and_skips_fresh_watch(monkeypatch):
     import app.jobs.renew_google_watch as job
 

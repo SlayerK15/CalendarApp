@@ -103,6 +103,68 @@ def test_native_google_sheet_still_uses_gid(google, monkeypatch):
     assert "My%20Timetable" in calls[-1]
 
 
+@pytest.mark.parametrize("sheet_name", ["Timetable", ""])
+def test_additional_workbook_can_override_primary_worksheet(google, monkeypatch, sheet_name):
+    from app.config import AdditionalTimetable
+
+    monkeypatch.setenv("EXCEL_SHEET_NAME", "Term-I")
+    settings.cache_clear()
+    google.user.tokens = encrypt({"scope": "https://www.googleapis.com/auth/drive.readonly"})
+    monkeypatch.setattr(google, "request", lambda *a, **kw: {"mimeType": XLSX_MIME})
+    monkeypatch.setattr(google, "download_excel", lambda url: workbook_bytes(multiple=bool(sheet_name)))
+    source = AdditionalTimetable(spreadsheet_id="term-two", excel_sheet_name=sheet_name)
+    assert parse_sheet(google.sheet(source))[0]["row_id"] == "math-1"
+
+
+def test_additional_workbook_defaults_to_global_worksheet(google, monkeypatch):
+    from app.config import AdditionalTimetable
+
+    monkeypatch.setenv("EXCEL_SHEET_NAME", "Timetable")
+    settings.cache_clear()
+    google.user.tokens = encrypt({"scope": "https://www.googleapis.com/auth/drive.readonly"})
+    monkeypatch.setattr(google, "request", lambda *a, **kw: {"mimeType": XLSX_MIME})
+    monkeypatch.setattr(google, "download_excel", lambda url: workbook_bytes(multiple=True))
+    assert parse_sheet(google.sheet(AdditionalTimetable(spreadsheet_id="term-two")))[0]["row_id"] == "math-1"
+
+
+@pytest.mark.parametrize(
+    "error,exception,message",
+    [
+        ("invalid_grant", GooglePermissionRequired, "Reconnect Google"),
+        ("invalid_client", ValueError, "administrator"),
+        ("deleted_client", ValueError, "administrator"),
+    ],
+)
+def test_refresh_errors_give_safe_recovery_instructions(google, error, exception, message):
+    google.user.tokens = encrypt({"refresh_token": "private-refresh-token"})
+    google._client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(400, json={"error": error, "error_description": "private-provider-detail"})
+    ))
+    try:
+        with pytest.raises(exception, match=message) as caught:
+            google.sheet(SimpleNamespace(spreadsheet_id="file", sheet_gid="0"))
+        assert "private" not in str(caught.value)
+    finally:
+        google._client.close()
+
+
+def test_missing_refresh_token_requires_reconnection(google):
+    with pytest.raises(GooglePermissionRequired, match="Reconnect Google"):
+        google.access_token()
+
+
+def test_transient_refresh_error_remains_retryable(google):
+    google.user.tokens = encrypt({"refresh_token": "private-refresh-token"})
+    google._client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(503, text="unavailable")
+    ))
+    try:
+        with pytest.raises(httpx.HTTPStatusError):
+            google.access_token()
+    finally:
+        google._client.close()
+
+
 def test_disabled_api_is_reported_actionably(google, monkeypatch):
     def provider(*args, **kwargs):
         request = httpx.Request("GET", "https://www.googleapis.com/drive/v3/files/file")

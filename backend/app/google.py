@@ -42,6 +42,8 @@ class Google:
     def access_token(self):
         token = decrypt(self.user.tokens)
         if token.get("expires_at", 0) < time.time() + 90:
+            if not token.get("refresh_token"):
+                raise GooglePermissionRequired("Reconnect Google to restore automatic timetable sync.")
             with self.http() as client:
                 response = client.post(
                     "https://oauth2.googleapis.com/token",
@@ -52,6 +54,19 @@ class Google:
                         "grant_type": "refresh_token",
                     },
                 )
+                if response.status_code in {400, 401}:
+                    try:
+                        error = response.json().get("error")
+                    except (ValueError, AttributeError):
+                        error = None
+                    if error == "invalid_grant":
+                        raise GooglePermissionRequired(
+                            "Google authorization has expired or been revoked. Reconnect Google to resume timetable sync."
+                        )
+                    if isinstance(error, str) and error in {"invalid_client", "deleted_client", "unauthorized_client"}:
+                        raise ValueError(
+                            "Google OAuth configuration is invalid. The app administrator must check the client ID and secret."
+                        )
                 response.raise_for_status()
                 update = response.json()
             token.update(update)
@@ -106,7 +121,8 @@ class Google:
                     "Your timetable is an Excel workbook. Reconnect Google to grant read-only Drive access so its contents can be read."
                 )
             content = self.download_excel(file_url)
-            return read_excel(content, settings().excel_sheet_name)
+            sheet_name = getattr(source, "excel_sheet_name", None)
+            return read_excel(content, settings().excel_sheet_name if sheet_name is None else sheet_name)
         if file["mimeType"] != SHEETS_MIME:
             raise ValueError("Use a Google Sheets spreadsheet or an Excel .xlsx timetable.")
         base = f"https://sheets.googleapis.com/v4/spreadsheets/{quote(source.spreadsheet_id, safe='')}"

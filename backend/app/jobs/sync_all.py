@@ -16,7 +16,11 @@ BATCH_SIZE = 100
 def reconcile_one(source_id):
     failed = False
     try:
-        failed = sync_source(source_id) == "failed"
+        result = sync_source(source_id)
+        if result == "reconnect_required":
+            logging.error("sync source=%s requires Google reconnection; skipping watch renewal", source_id)
+            return True
+        failed = result == "failed"
     except Exception as exc:
         failed = True
         logging.error("sync source=%s error=%s", source_id, type(exc).__name__)

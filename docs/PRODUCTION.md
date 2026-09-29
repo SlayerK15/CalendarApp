@@ -49,3 +49,15 @@ The Render cron schedule is now `17 */6 * * *`. API and cron settings are `SYNC_
 The repository includes a three-hour GitHub wake/health workflow, privacy and terms pages, and a Google verification guide. See `SCALING.md` and `GOOGLE_VERIFICATION.md` for operating limits and required Google Cloud owner actions.
 
 Release `17a414b` is live on the frontend, API and cron. Runtime diagnostics confirmed the settings above and the MBA Analytics F connection. The updated cron smoke test completed at `2026-09-11T14:04:50Z`. Home, privacy, terms, `/health` and `/health/db` returned HTTP 200. [GitHub CI passed](https://github.com/SlayerK15/CalendarApp/actions/runs/34607697469), and the [manual wake workflow test passed](https://github.com/SlayerK15/CalendarApp/actions/runs/34607795249).
+
+## 29 September 2026 incident diagnosis
+
+Read-only Render log/configuration checks and Google refresh probes confirmed:
+
+- The six-hour cron still starts on schedule; the 29 September 12:17 UTC run processed four active sources and exited with status 1.
+- Google returned `invalid_grant` for all four stored refresh tokens. Retrying the cron cannot restore revoked or expired authorization. Each affected user must sign out and sign back in, approve access, then sync again. Existing calendar events remain intact.
+- The second timetable is still `enabled: false` in both the API and cron environments. It has not been validated or enabled. Fresh Google authorization and access to both files are required before checking its worksheet, parsing its classes and enabling it.
+
+Local fixes add actionable reconnect handling, skip redundant watch renewal after an authorization failure, and support per-file Excel worksheet names. These changes require deployment; this incident record does not claim they are live or that Term 2 has been imported.
+
+If the OAuth application's audience is still **Testing**, Google's [refresh-token expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration) impose a seven-day lifetime for this app's scopes. Check **Google Auth Platform → Audience** and complete the production publishing/verification steps in `GOOGLE_VERIFICATION.md` as applicable, then reconnect affected accounts. The current Google Cloud publishing status was not verified during this diagnosis.

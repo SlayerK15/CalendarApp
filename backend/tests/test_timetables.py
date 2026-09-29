@@ -98,3 +98,36 @@ def test_disabling_imported_file_does_not_cancel_its_existing_events(multiple):
     existing = {"external:unconfigured:file-event": SimpleNamespace(cancelled=False)}
     with pytest.raises(ValueError, match="protect its events"):
         guard_timetable_removals(multiple, existing, [{"row_id": "primary-event"}])
+
+
+def test_retiring_primary_reads_only_second_and_preserves_its_ids(multiple, monkeypatch):
+    original_id = read_timetables(Reader(), multiple)[1]["row_id"]
+    monkeypatch.setenv("PRIMARY_TIMETABLE_ENABLED", "false")
+    settings.cache_clear()
+    reader = Reader()
+    events = read_timetables(reader, multiple)
+    assert reader.calls == ["second"]
+    assert [event["row_id"] for event in events] == [original_id]
+    assert len(source_listing(multiple)) == 1
+    assert "second/edit" in source_listing(multiple)[0]["url"]
+    existing = {f"primary-{i}": SimpleNamespace(cancelled=False) for i in range(100)}
+    guard_timetable_removals(multiple, existing, events)
+
+
+def test_retiring_primary_keeps_second_file_removal_guard(multiple, monkeypatch):
+    monkeypatch.setenv("PRIMARY_TIMETABLE_ENABLED", "false")
+    settings.cache_clear()
+    prefix = timetable_prefix(additional_for(multiple)[0])
+    existing = {prefix + str(i): SimpleNamespace(cancelled=False) for i in range(20)}
+    with pytest.raises(ValueError, match="Suspicious drop"):
+        guard_timetable_removals(multiple, existing, [{"row_id": prefix + "0"}])
+
+
+def test_retiring_every_file_is_rejected(multiple, monkeypatch):
+    monkeypatch.setenv("PRIMARY_TIMETABLE_ENABLED", "false")
+    monkeypatch.setenv("ADDITIONAL_TIMETABLES", "[]")
+    settings.cache_clear()
+    with pytest.raises(ValueError, match="Enable at least one"):
+        settings().validate_runtime()
+    with pytest.raises(ValueError, match="No enabled timetable"):
+        read_timetables(Reader(), multiple)

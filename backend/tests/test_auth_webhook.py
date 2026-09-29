@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.config import settings
 from app.db import Base, get_db
 from app.main import app
-from app.models import AuthFlow, Session as LoginSession, Source, User, Watch
+from app.models import AuthFlow, Session as LoginSession, Source, SyncRun, User, Watch
 from app.security import digest, encrypt
 from app.sync import utcnow
 
@@ -235,3 +235,17 @@ def test_excel_permission_error_exposes_reconnect_action(client, monkeypatch):
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == "google_reconnect_required"
     assert "Reconnect Google" in response.json()["detail"]["message"]
+
+
+def test_dashboard_exposes_background_reconnect_requirement(client):
+    http, db = client
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.add(SyncRun(id="expired-auth", source_id="s", status="reconnect_required", message="Reconnect Google"))
+    db.get(Source, "s").last_error = "Reconnect Google"
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+    assert http.get("/api/dashboard").json()["google_reconnect_required"] is True
+    db.add(SyncRun(id="recovered", source_id="s", status="success", message="Done", started_at=utcnow() + timedelta(seconds=1)))
+    db.get(Source, "s").last_error = None
+    db.commit()
+    assert http.get("/api/dashboard").json()["google_reconnect_required"] is False
