@@ -13,7 +13,7 @@ TIME_RANGE = re.compile(
 )
 CLASS = re.compile(
     r"^[ \t]*(?:\[?cancelled\]?[ :\-]*)?"
-    r"(?P<course>[A-Z]{2,}(?:[ \t]*-[ \t]*[IVX]+)?)"
+    r"(?P<course>Dissertation[ \t]+Module[ \t]*-[ \t]*[IVX]+|[A-Z]{2,}(?:[ \t]*-[ \t]*[IVX]+)?)"
     r"(?:[ \t]*[-–]?[ \t]*(?:\n[ \t]*)?(?P<kind>Quiz|Extra[ \t]+Session)[ \t]*[-–]?[ \t]*|[ \t]*[-–][ \t]*)"
     r"(?P<number>\d+(?:[ \t]*&[ \t]*\d+)?)\b",
     re.I | re.M,
@@ -113,6 +113,8 @@ def adapt_college_grid(values):
                 stop = matches[index + 1].start() if index + 1 < len(matches) else len(text)
                 entry = text[match.start() : stop].strip(" \n\r\t-")
                 course = re.sub(r"\s+", "", match["course"]).upper()
+                if course.startswith("DISSERTATIONMODULE-"):
+                    course = "Dissertation Module-" + course.rsplit("-", 1)[1]
                 kind = "-" + " ".join(match["kind"].title().split()) if match["kind"] else ""
                 number = re.sub(r"\s+", "", match["number"])
                 title = f"{course}{kind}-{number}"

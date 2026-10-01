@@ -7,6 +7,7 @@ The supplied file is **Term- I Class Schedule MBA & MBAA-2026-28.xlsx**, an Exce
 The adapter recognizes the `Term-I` layout: a row of section headings followed by dated rows and four time columns per section. MBA contains sections A–D; MBA Analytics contains E–F, as indicated by the workbook's headings. Each numbered course session or quiz becomes a dated calendar event. Course codes remain in event titles and the original class text, including faculty details, is kept in the description.
 
 - Cell-specific times override the column's normal time. Multiple numbered entries in one cell are parsed separately.
+- Term 2 dissertation labels such as `Dissertation Module-I-1` are numbered classes; they use the column time unless the cell specifies an override. Their faculty text, merged duration, and cancellation formatting are preserved like other classes.
 - Whole-cell or course-label strikethrough and explicit cancellation text mark the affected event cancelled.
 - Classroom headings supply the default location; `CR-…` and `Online` override it.
 - Room reservations, holidays, no-class days and exam-week banners are excluded because they do not specify individual timed classes.

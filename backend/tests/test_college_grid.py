@@ -162,3 +162,38 @@ def test_extra_double_session_and_roman_numeral_course():
     result = parse(book)
     assert [e["payload"]["summary"] for e in result] == ["WOC-Extra Session-1&2", "MM-II-Quiz-2"]
     assert result[0]["payload"]["end"]["dateTime"][11:16] == "17:30"
+
+
+def test_term_two_dissertation_at_y9_and_identity_after_rescheduling():
+    book, sheet = workbook()
+    sheet["B9"] = date(2026, 10, 1)
+    sheet["Y9"] = "Dissertation Module-I-1\nProf. Example"
+    initial = parse(book)[0]
+    assert initial["programme"] == "MBA Analytics"
+    assert initial["section"] == "E"
+    assert initial["payload"]["summary"] == "Dissertation Module-I-1"
+    assert initial["payload"]["start"]["dateTime"] == "2026-10-01T10:45:00+05:30"
+    assert initial["payload"]["end"]["dateTime"] == "2026-10-01T12:00:00+05:30"
+    assert "Prof. Example" in initial["payload"]["description"]
+    sheet["Y9"] = None
+    sheet["Z9"] = "dissertation  module - I - 1\nProf. Other"
+    assert parse(book)[0]["row_id"] == initial["row_id"]
+
+
+def test_dissertation_cancellation_and_merged_duration():
+    book, sheet = workbook()
+    sheet["X7"] = "Dissertation Module-II-2\nProf. Example"
+    sheet["X7"].font = Font(strike=True)
+    sheet.merge_cells("X7:Y7")
+    event = parse(book)[0]
+    assert event["cancelled"] is True
+    assert event["payload"]["summary"] == "Dissertation Module-II-2"
+    assert event["payload"]["end"]["dateTime"][11:16] == "12:00"
+
+
+def test_unnumbered_dissertation_is_not_silently_skipped():
+    book, sheet = workbook()
+    sheet["B9"] = date(2026, 10, 1)
+    sheet["Y9"] = "Dissertation Module-I\nProf. Example"
+    with pytest.raises(ValueError, match="row 9, column 25"):
+        parse(book)

@@ -249,3 +249,20 @@ def test_dashboard_exposes_background_reconnect_requirement(client):
     db.get(Source, "s").last_error = None
     db.commit()
     assert http.get("/api/dashboard").json()["google_reconnect_required"] is False
+
+
+def test_timetable_parse_error_is_not_reported_as_google_reconnection(client, monkeypatch):
+    import app.main as main
+
+    http, db = client
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+
+    def invalid_timetable(*_):
+        raise ValueError("Unrecognized timetable entry at row 9, column 25")
+
+    monkeypatch.setattr(main, "read_timetables", invalid_timetable)
+    response = http.get("/api/options")
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Unrecognized timetable entry at row 9, column 25"}
