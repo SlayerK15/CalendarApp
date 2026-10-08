@@ -1,5 +1,6 @@
 # Render-only deployment matching the existing Render services.
-# Reuses the free CalendarApp frontend; API, database, and cron use paid plans.
+# Reuses the free CalendarApp frontend; API and database use paid plans.
+# The sync job runs on a GitHub Actions schedule instead of a Render cron service.
 services:
 - type: web
   name: CalendarApp
@@ -50,62 +51,6 @@ services:
     sync: false
   - key: TOKEN_ENCRYPTION_KEY
     sync: false
-  - key: DATABASE_URL
-    fromDatabase:
-      name: livetimetable-db
-      property: connectionString
-- type: cron
-  name: livetimetable-sync-cron
-  runtime: python
-  rootDir: backend
-  plan: 0.5c-512mb
-  region: singapore
-  schedule: '17 */6 * * *'
-  buildCommand: pip install -r requirements.txt
-  startCommand: python -m app.jobs.sync_all
-  autoDeployTrigger: checksPass
-  envVars:
-  - fromGroup: livetimetable-shared
-  - key: FRONTEND_URL
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: FRONTEND_URL
-  - key: BACKEND_URL
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: BACKEND_URL
-  - key: ALLOWED_ORIGINS
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: ALLOWED_ORIGINS
-  - key: GOOGLE_CLIENT_ID
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: GOOGLE_CLIENT_ID
-  - key: GOOGLE_CLIENT_SECRET
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: GOOGLE_CLIENT_SECRET
-  - key: GOOGLE_REDIRECT_URI
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: GOOGLE_REDIRECT_URI
-  - key: GOOGLE_WEBHOOK_SECRET
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: GOOGLE_WEBHOOK_SECRET
-  - key: TOKEN_ENCRYPTION_KEY
-    fromService:
-      type: web
-      name: livetimetable-api
-      envVarKey: TOKEN_ENCRYPTION_KEY
   - key: DATABASE_URL
     fromDatabase:
       name: livetimetable-db

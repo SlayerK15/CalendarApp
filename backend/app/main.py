@@ -315,6 +315,7 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
     return {
         "programme": source.programme,
         "timetables": source_listing(source),
+        "timetable_timezone": settings().timetable_timezone,
         "section": source.section,
         "active": source.active,
         "pending": source.pending,

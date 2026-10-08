@@ -75,8 +75,11 @@ Set `TEST_DATABASE_URL` to a disposable PostgreSQL database to include the cross
 cd frontend
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
+
+The dashboard includes week and day calendar views, date navigation, overlapping class placement, cancellation indicators, and class details. Mobile screens default to day view. Class dates and times use the configured timetable timezone. Run frontend tests with Node 22.6+ (CI uses Node 22).
 
 ## Deploy
 

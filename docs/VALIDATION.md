@@ -1,5 +1,17 @@
 # Validation record
 
+## 1 October 2026 dashboard calendar (local)
+
+The dashboard calendar adds week/day views, previous/next and Today navigation, a date picker, overlapping class columns, cancellation styling, and a class details dialog. The API supplies the timetable timezone so the display does not depend on the browser timezone.
+
+- Frontend lint, TypeScript checks, production build, and all five calendar tests passed. Calendar tests cover timezone boundaries, leap years, overlapping and adjacent classes, overnight classes, and invalid times.
+- Backend lint passed; 66 tests passed and the optional PostgreSQL integration test was skipped.
+- Chromium checks against the local production build passed at 1440px and 390px with synthetic events and a browser timezone different from the timetable. Verified mobile day view, week navigation, date selection across a year boundary, Today, overlapping classes, empty states, dialog focus, Escape dismissal, and reopening. No browser errors or page horizontal overflow were found. Desktop and mobile screenshots were visually reviewed.
+
+These checks validate the local calendar changes only; they do not establish deployment or a successful live timetable sync.
+
+The subsequent Term 2 parser fix supports the reported `Dissertation Module-I-1` entry at Y9. Regressions cover its section and times, stable identity after rescheduling, merged duration, cancellation, and rejection of unnumbered labels. Backend checks now pass 70 tests with one optional PostgreSQL test skipped; all five frontend tests, lint, type checks, and build pass. A local browser regression confirms a fresh parsing error does not inherit the reconnect action from an older sync failure, while a genuine Google authorization error retains that action. The full Term 2 workbook and production deployment remain unverified for this fix.
+
 Validated locally and on Render on 9 September 2026. This record distinguishes tested behavior from production acceptance that still needs a selected programme and section.
 
 ## Passed

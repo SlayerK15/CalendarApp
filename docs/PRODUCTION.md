@@ -61,3 +61,17 @@ Read-only Render log/configuration checks and Google refresh probes confirmed:
 Local fixes add actionable reconnect handling, skip redundant watch renewal after an authorization failure, and support per-file Excel worksheet names. These changes require deployment; this incident record does not claim they are live or that Term 2 has been imported.
 
 If the OAuth application's audience is still **Testing**, Google's [refresh-token expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration) impose a seven-day lifetime for this app's scopes. Check **Google Auth Platform → Audience** and complete the production publishing/verification steps in `GOOGLE_VERIFICATION.md` as applicable, then reconnect affected accounts. The current Google Cloud publishing status was not verified during this diagnosis.
+
+## Sheet 2-only release
+
+At the user's request, release `6271e70` retires Sheet 1 and enables only [Term 2](https://docs.google.com/spreadsheets/d/14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt/edit?gid=129828207). The API and cron now have `PRIMARY_TIMETABLE_ENABLED=false` and the Term 2 entry enabled in `ADDITIONAL_TIMETABLES`. Sheet 1's identifier remains an internal identity anchor; its historical calendar events are preserved, hidden from the active dashboard, and no longer read or reconciled. Its Drive watch is no longer renewed. The six-hour schedule is unchanged.
+
+The API, frontend and cron all reported `live` on this commit. [CI passed](https://github.com/SlayerK15/CalendarApp/actions/runs/36611539153); local validation passed 66 tests with one optional PostgreSQL test skipped, backend lint, frontend lint and type checks.
+
+A post-deployment sync confirmed three accounts still require Google reconnection. One account has reconnected, but Google returned 404 for Sheet 2, surfaced as “The timetable file was not found or is not shared with the signed-in Google account.” Sheet 2 must be shared with that account, or the user must reconnect with an account that already has access. The configuration switch is live; Term 2 classes have not yet been imported or parser-validated. The earlier disabled-file configuration and local-only fix notes above describe the state before this release.
+
+## 1 October 2026 dissertation parser hotfix
+
+With the user's explicit production-release approval, commit `bebb4de056df3a1d03bced59c7468f117d004970` was published to `main`. It accepts the reported `Dissertation Module-I-1` class label at Y9, preserves numbered identity, times and cancellations, and prevents a fresh request error from inheriting an older sync's reconnect action. [CI passed](https://github.com/SlayerK15/CalendarApp/actions/runs/36870500247), and the API, frontend, and cron all reported `live` on that commit. Public frontend, API health and database health endpoints returned HTTP 200.
+
+After reloading the authenticated dashboard, the Y9 parsing error was no longer displayed. The dashboard still showed an earlier Google authorization failure and zero imported Term 2 classes. A successful fresh calendar sync has not been confirmed. Browser retry actions were interrupted by user activity; no successful retry is claimed. The separate calendar-view work remains local and was not part of this focused release.

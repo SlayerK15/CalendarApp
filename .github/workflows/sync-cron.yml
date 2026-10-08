@@ -1,0 +1,50 @@
+name: Sync cron
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-cron
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ENVIRONMENT: production
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      FRONTEND_URL: https://calendarapp-2r1h.onrender.com
+      BACKEND_URL: https://livetimetable-api.onrender.com
+      ALLOWED_ORIGINS: https://calendarapp-2r1h.onrender.com
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REDIRECT_URI: https://livetimetable-api.onrender.com/api/auth/google/callback
+      GOOGLE_WEBHOOK_SECRET: ${{ secrets.GOOGLE_WEBHOOK_SECRET }}
+      TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}
+      GOOGLE_SPREADSHEET_ID: 1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN
+      GOOGLE_SHEET_GID: '129828207'
+      PRIMARY_TIMETABLE_ENABLED: 'false'
+      ADDITIONAL_TIMETABLES: '[{"spreadsheet_id":"14B2j6u27W2OS4e1lXHMcBYZejYLy0nkt","sheet_gid":"129828207","label":"Term 2 timetable","enabled":true}]'
+      SYNC_INTERVAL_SECONDS: '21600'
+      SYNC_ON_CHANGE: 'false'
+      SYNC_MAX_WORKERS: '2'
+      CANCELLED_EVENT_BEHAVIOUR: mark_cancelled
+      TIMETABLE_TIMEZONE: Asia/Kolkata
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: 'backend/requirements*.txt'
+      - run: pip install -r requirements.txt
+      - run: python -m app.jobs.sync_all
