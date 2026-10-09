@@ -1,5 +1,5 @@
 # Render-only deployment matching the existing Render services.
-# Reuses the free CalendarApp frontend; API and database use paid plans.
+# Frontend and API both run on Render's free web service plan; the database is still paid.
 # The sync job runs on a GitHub Actions schedule instead of a Render cron service.
 services:
 - type: web
@@ -26,7 +26,7 @@ services:
   name: livetimetable-api
   runtime: python
   rootDir: backend
-  plan: 0.5c-512mb
+  plan: free
   region: singapore
   buildCommand: pip install -r requirements.txt
   preDeployCommand: alembic upgrade head

@@ -4,7 +4,7 @@ services:
     name: livetimetable-api
     runtime: python
     rootDir: backend
-    plan: 0.5c-512mb
+    plan: free
     region: singapore
     buildCommand: pip install -r requirements.txt
     preDeployCommand: alembic upgrade head
