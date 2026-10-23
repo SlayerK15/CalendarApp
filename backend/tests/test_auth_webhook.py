@@ -266,3 +266,59 @@ def test_timetable_parse_error_is_not_reported_as_google_reconnection(client, mo
     response = http.get("/api/options")
     assert response.status_code == 422
     assert response.json() == {"detail": "Unrecognized timetable entry at row 9, column 25"}
+
+
+def test_options_keep_sections_even_when_their_classes_are_quarantined(client, monkeypatch):
+    import app.main as main
+
+    http, db = client
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+
+    class Reader:
+        def __init__(self, *_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def sheet(self, _):
+            return [
+                ["", "Section - A", "Section - B"],
+                ["Date", "9.15 am - 10.30 am", "9.15 am - 10.30 am"],
+                ["2026-10-01", "Unrecognized class notation", "Another unknown entry"],
+            ]
+
+    monkeypatch.setattr(main, "Google", Reader)
+    response = http.get("/api/options")
+    assert response.status_code == 200
+    assert response.json() == {"MBA": ["A", "B"]}
+
+
+def test_dashboard_warning_survives_running_check_and_clears_after_complete_sync(client):
+    http, db = client
+    checked = utcnow()
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=checked + timedelta(hours=1)))
+    db.add(SyncRun(
+        id="partial-check", source_id="s", status="partial", started_at=checked,
+        message="Existing calendar events for the unreadable timetable were kept unchanged."
+    ))
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+    result = http.get("/api/dashboard").json()
+    assert "kept unchanged" in result["sync_warning"]
+    assert result["last_error"] is None
+    assert result["google_reconnect_required"] is False
+    db.add(SyncRun(
+        id="running-check", source_id="s", status="running", message="", started_at=checked + timedelta(seconds=1)
+    ))
+    db.commit()
+    assert http.get("/api/dashboard").json()["sync_warning"] == result["sync_warning"]
+    running = db.get(SyncRun, "running-check")
+    running.status, running.message = "success", "Reconciliation completed"
+    db.commit()
+    assert http.get("/api/dashboard").json()["sync_warning"] is None

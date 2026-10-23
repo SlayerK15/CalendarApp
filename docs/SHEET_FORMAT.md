@@ -8,10 +8,12 @@ The adapter recognizes the `Term-I` layout: a row of section headings followed b
 
 - Cell-specific times override the column's normal time. Multiple numbered entries in one cell are parsed separately.
 - Term 2 dissertation labels such as `Dissertation Module-I-1` are numbered classes; they use the column time unless the cell specifies an override. Their faculty text, merged duration, and cancellation formatting are preserved like other classes.
+- Course activities such as `OD-Make-up-Quiz`, `CF-Presentation`, and retake quizzes may omit a session number when they provide an explicit time range. Numbered activities keep using the normal slot when no override is supplied. Common dash, spacing, capitalisation and `a.m.`/`p.m.` variants are accepted.
 - Whole-cell or course-label strikethrough and explicit cancellation text mark the affected event cancelled.
 - Classroom headings supply the default location; `CR-…` and `Online` override it.
-- Room reservations, holidays, no-class days and exam-week banners are excluded because they do not specify individual timed classes.
-- Unknown entries and ambiguous times pause synchronization rather than inventing class times.
+- Room reservations (including `B-1 Classroom Booked for TEDx`), holidays, no-class days and exam-week banners are excluded. A separate booking note's time does not override the preceding class's time.
+- Unknown entries and ambiguous cell times preserve the last good calendar events for that programme/section in that file. Other sections and readable files continue syncing. The affected user sees a review warning with the file, row and column; programme/section choices stay available. No additions, moves, or inferred cancellations are made for the affected section until it is readable again.
+- Section-level preservation is deliberate: skipping one cell could renumber repeated class labels and move the wrong calendar event. Partial runs leave the last complete-sync timestamp unchanged, retry at the normal scheduled/manual sync, and clear their warning after a complete read. Invalid structure, cross-section/date merges and source access failures still pause the entire sync.
 - IDs use programme, section and numbered session/quiz labels. Dates, times, faculty and rooms can change without changing a unique session's ID. Repeated labels receive occurrence suffixes in grid order. Retain cancelled duplicates in place: removing or reordering indistinguishable duplicate labels can change their occurrence matching. A sheet with explicit permanent IDs avoids this ambiguity.
 
 The adapter lives in `app/college_grid.py`; the flat-row format below remains supported for other timetables.
@@ -39,7 +41,7 @@ See `docs/sample-timetable.csv` for synthetic sample data. Each row is one dated
 
 Do not derive IDs from row positions, room, or start time. Sorting or moving a class must not change its ID. Explicit cancelled rows are safest. Missing rows are marked cancelled only after a successful, valid read. An empty selection or a drop below half of more than ten previous active classes aborts changes. Small accidental deletions cannot be distinguished from intentional cancellations; prefer explicit statuses.
 
-The parser validates the whole sheet before touching any calendar. A malformed row, duplicated ID, missing tab, empty sheet, or unrecognized format stops the sync and records an error. Add a dedicated adapter for a different layout; preserve the normalized event contract and stable IDs. This boundary allows a grid/Excel adapter without changing OAuth, deployment, or synchronization.
+The parser validates the whole sheet before touching any calendar. A malformed explicit-format row, duplicated ID, missing tab, empty sheet, or unrecognized layout stops the sync and records an error. Recognized college grids isolate cell-level issues as described above. Add a dedicated adapter for a different layout; preserve the normalized event contract and stable IDs. This boundary allows a grid/Excel adapter without changing OAuth, deployment, or synchronization.
 
 ## Excel input
 
@@ -59,6 +61,6 @@ The active file is [Term 2 timetable](https://docs.google.com/spreadsheets/d/14B
 
 The dashboard lists the primary file only when enabled, plus configured additional files. Additional classes receive file-specific hashed IDs so equal session labels in different workbooks cannot overwrite one another. The original event IDs remain unchanged. Additional files are read during the six-hour reconciliation and manual sync; Drive watch renewal stops when the primary file is retired. Additional files use scheduled and manual reconciliation.
 
-All enabled files must read and parse successfully before calendar writes begin. Removal guards run independently per file, so adding many new events in one file cannot hide a suspicious loss in another. Disabling or removing a file whose entries were already imported pauses sync rather than cancelling those entries. Make deliberate source-removal changes separately.
+All enabled files must be fetched and their structure validated before calendar writes begin. For a college grid with cell-level warnings, existing events from the affected selection/file are kept unchanged while readable files can reconcile. Removal guards run independently per readable file, so adding many new events in one file cannot hide a suspicious loss in another. Disabling or removing a file whose entries were already imported pauses sync rather than cancelling those entries. Make deliberate source-removal changes separately.
 
 Retiring the primary file with `PRIMARY_TIMETABLE_ENABLED=false` intentionally excludes its rows from removal guards and reconciliation. Historical primary events remain in Google Calendar and the database but are hidden from the active timetable dashboard. Its spreadsheet ID remains unchanged as a legacy identity anchor. At least one additional file must be enabled. Removal guards still protect each active additional file, and removing an already imported additional file still pauses sync.

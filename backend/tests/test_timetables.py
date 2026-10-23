@@ -131,3 +131,47 @@ def test_retiring_every_file_is_rejected(multiple, monkeypatch):
         settings().validate_runtime()
     with pytest.raises(ValueError, match="No enabled timetable"):
         read_timetables(Reader(), multiple)
+
+
+def test_unreadable_cells_keep_file_scope_and_section_choices(multiple):
+    rows = [
+        ["", "Section - A", "Section - B"],
+        ["Date", "9.15 am - 10.30 am", "9.15 am - 10.30 am"],
+        ["2026-10-01", "Unrecognized timetable text", "ME-1"],
+    ]
+    reader = Reader()
+    reader.sheet = lambda _: rows
+    events = read_timetables(reader, multiple)
+    assert len(events) == 2
+    assert events.sections == {("MBA", "A"), ("MBA", "B")}
+    assert {issue["scope"] for issue in events.issues} == {
+        "primary", timetable_prefix(additional_for(multiple)[0])
+    }
+    assert {issue["timetable"] for issue in events.issues} == {"Original timetable", "Second timetable"}
+    assert all(issue["row"] == 3 and issue["column"] == 2 for issue in events.issues)
+
+
+def test_all_quarantined_sections_return_diagnostics_instead_of_empty_sheet_error(multiple):
+    rows = [
+        ["", "Section - A", "Section - B"],
+        ["Date", "9.15 am - 10.30 am", "9.15 am - 10.30 am"],
+        ["2026-10-01", "Unrecognized timetable text", "Another unknown class"],
+    ]
+    reader = Reader()
+    reader.sheet = lambda _: rows
+    events = read_timetables(reader, multiple)
+    assert events == []
+    assert len(events.issues) == 4
+    assert events.sections == {("MBA", "A"), ("MBA", "B")}
+
+
+def test_preserved_scope_cannot_disable_other_file_removal_guards(multiple):
+    prefix = timetable_prefix(additional_for(multiple)[0])
+    existing = {"old-primary": SimpleNamespace(cancelled=False)}
+    existing.update({prefix + str(i): SimpleNamespace(cancelled=False) for i in range(20)})
+    with pytest.raises(ValueError, match="Suspicious drop"):
+        guard_timetable_removals(multiple, existing, [{"row_id": prefix + "0"}], {"primary"})
+    with pytest.raises(ValueError, match="protect its events"):
+        guard_timetable_removals(
+            multiple, {"external:unconfigured:file-event": SimpleNamespace(cancelled=False)}, [], {"primary"}
+        )

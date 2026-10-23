@@ -268,3 +268,153 @@ def test_second_only_switch_preserves_primary_history_without_fetching_it(db, mo
         assert apply_sync(db, source, google) == "unchanged"
     finally:
         settings.cache_clear()
+
+
+def college_rows():
+    return [
+        ["", "Section - A", "Section - B"],
+        ["Date", "9.15 am - 10.30 am", "9.15 am - 10.30 am"],
+        ["2026-10-01", "ME-1", "BS-1"],
+        ["2026-10-02", "ME-1\nCancelled", "BS-2"],
+    ]
+
+
+def event_snapshot(db):
+    return {
+        event.row_id: (copy.deepcopy(event.payload), event.cancelled)
+        for event in db.scalars(select(Event))
+    }
+
+
+def test_unreadable_cell_preserves_entire_selected_section_and_duplicate_ids(db):
+    source, google = db.get(Source, "source"), FakeGoogle()
+    source.programme, source.section = "MBA", "A"
+    google.rows = college_rows()
+    assert apply_sync(db, source, google) == "success"
+    original = event_snapshot(db)
+    assert len(original) == 2
+    google.calls.clear()
+    google.rows[2][1] = "New unrecognized class notation"
+    google.rows[3][1] = "ME-1\nCR-C2"
+    result = apply_sync(db, source, google)
+    assert result == "partial"
+    assert "row 3, column 2" in result.message
+    assert "No calendar changes were made" in result.message
+    assert event_snapshot(db) == original
+    assert google.calls == []
+    assert source.event_count == 1
+    assert source.fingerprint is None
+    assert apply_sync(db, source, google) == "partial"
+    assert google.calls == []
+    google.rows = college_rows()
+    google.rows[2][1] = "ME-1\nCR-C2"
+    assert apply_sync(db, source, google) == "success"
+    assert len(google.calls) == 1
+    assert google.calls[0][1]["location"] == "Classroom C2"
+    assert len(event_snapshot(db)) == 2
+    assert apply_sync(db, source, google) == "unchanged"
+
+
+def test_other_sections_unknown_cell_does_not_interrupt_valid_selected_updates(db):
+    source, google = db.get(Source, "source"), FakeGoogle()
+    source.programme, source.section = "MBA", "B"
+    google.rows = college_rows()
+    assert apply_sync(db, source, google) == "success"
+    google.calls.clear()
+    google.rows[2][1] = "New unrecognized class notation"
+    google.rows[2][2] = "BS-1\nCR-C2"
+    assert apply_sync(db, source, google) == "success"
+    assert len(google.calls) == 1
+    assert google.calls[0][1]["location"] == "Classroom C2"
+    assert apply_sync(db, source, google) == "unchanged"
+
+
+@pytest.mark.parametrize("affected_file", ["sheet", "second"])
+def test_partial_file_does_not_block_other_file_and_repair_reconciles_original_fingerprint(db, monkeypatch, affected_file):
+    from app.config import settings
+    from app.timetables import additional_for, event_scope, timetable_prefix
+
+    monkeypatch.setenv("ADDITIONAL_TIMETABLES", '[{"spreadsheet_id":"second","sheet_gid":"42"}]')
+    settings.cache_clear()
+    source, google = db.get(Source, "source"), FakeGoogle()
+    source.programme, source.section = "MBA", "A"
+    rows = {"sheet": college_rows(), "second": college_rows()}
+    google.sheet = lambda item: rows[item.spreadsheet_id]
+    try:
+        assert apply_sync(db, source, google) == "success"
+        original, original_fingerprint = event_snapshot(db), source.fingerprint
+        google.calls.clear()
+        readable_file = "second" if affected_file == "sheet" else "sheet"
+        frozen_scope = "primary" if affected_file == "sheet" else timetable_prefix(additional_for(source)[0])
+        rows[affected_file][2][1] = "New unrecognized class notation"
+        rows[readable_file][2][1] = "ME-1\nCR-B2"
+        result = apply_sync(db, source, google)
+        assert result == "partial"
+        assert "1 calendar update" in result.message
+        assert len(google.calls) == 1
+        assert source.fingerprint is None
+        current = event_snapshot(db)
+        for row_id in original:
+            if event_scope(row_id) == frozen_scope:
+                assert current[row_id] == original[row_id]
+        assert source.event_count == 2
+        assert apply_sync(db, source, google) == "partial"
+        assert len(google.calls) == 1
+        rows["sheet"], rows["second"] = college_rows(), college_rows()
+        assert apply_sync(db, source, google) == "success"
+        assert len(google.calls) == 2
+        assert event_snapshot(db) == original
+        assert source.fingerprint == original_fingerprint
+    finally:
+        settings.cache_clear()
+
+
+def test_first_sync_with_only_affected_selected_section_does_not_create_empty_calendar(db):
+    source, google = db.get(Source, "source"), FakeGoogle()
+    source.programme, source.section = "MBA", "A"
+    google.rows = college_rows()
+    google.rows[2][1] = "New unrecognized class notation"
+
+    def unexpected_calendar(_):
+        pytest.fail("A paused timetable must not create an empty calendar")
+
+    google.calendar = unexpected_calendar
+    result = apply_sync(db, source, google)
+    assert result == "partial"
+    assert source.calendar_id is None
+    assert source.event_count == 0
+    assert google.calls == []
+
+
+def test_partial_run_records_warning_without_fatal_error_or_false_success_timestamp(db, monkeypatch):
+    import app.sync as sync
+
+    @contextmanager
+    def locked(_):
+        yield True
+
+    @contextmanager
+    def session():
+        yield db
+
+    source, google = db.get(Source, "source"), FakeGoogle()
+    source.programme, source.section = "MBA", "A"
+    google.rows = college_rows()
+    monkeypatch.setattr(sync, "source_lock", locked)
+    monkeypatch.setattr(sync, "SessionLocal", session)
+    monkeypatch.setattr(sync, "Google", lambda *_: google)
+    assert sync.sync_source("source") == "success"
+    last_complete = source.last_synced_at
+    source.last_error = "Previous parser failure"
+    source.pending = True
+    google.rows[2][1] = "New unrecognized class notation"
+    assert sync.sync_source("source") == "partial"
+    assert source.last_synced_at == last_complete
+    assert source.last_error is None
+    assert source.pending is False
+    run = db.scalar(select(SyncRun).where(SyncRun.status == "partial"))
+    assert "row 3, column 2" in run.message
+    google.rows = college_rows()
+    assert sync.sync_source("source") == "success"
+    assert source.last_error is None
+    assert source.last_synced_at >= last_complete

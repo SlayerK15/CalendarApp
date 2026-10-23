@@ -8,16 +8,25 @@ from app.college_grid import adapt_college_grid
 REQUIRED = {"id", "programme", "section", "title", "date", "start_time", "end_time"}
 
 
-def parse_sheet(values, timezone="Asia/Kolkata"):
+class ParsedEvents(list):
+    def __init__(self):
+        super().__init__()
+        self.issues = []
+        self.sections = set()
+
+
+def parse_sheet(values, timezone="Asia/Kolkata", *, tolerant=False):
     if not values:
         raise ValueError("Spreadsheet is empty; refusing to remove existing events")
-    grid = adapt_college_grid(values)
+    grid = adapt_college_grid(values, tolerant=tolerant)
     if grid is not None:
         values = grid
     headers = [str(v).strip().lower() for v in values[0]]
     if len(set(headers)) != len(headers) or not REQUIRED.issubset(headers):
         raise ValueError("Expected unique headers: " + ", ".join(sorted(REQUIRED)))
-    events, seen = [], set()
+    events, seen = ParsedEvents(), set()
+    events.issues = getattr(values, "issues", [])
+    events.sections = set(getattr(values, "sections", set()))
     for number, cells in enumerate(values[1:], 2):
         if not any(str(v).strip() for v in cells):
             continue
@@ -27,6 +36,7 @@ def parse_sheet(values, timezone="Asia/Kolkata"):
         if row["id"] in seen:
             raise ValueError(f"Row {number}: duplicate stable id")
         seen.add(row["id"])
+        events.sections.add((row["programme"], row["section"]))
         try:
             start = datetime.strptime(f"{row['date']} {row['start_time']}", "%Y-%m-%d %H:%M").replace(
                 tzinfo=ZoneInfo(timezone)

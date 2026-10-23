@@ -250,8 +250,8 @@ def options(user: User = Depends(current_user), db: DBSession = Depends(get_db))
     except Exception:
         raise HTTPException(502, "Could not read the spreadsheet. Check access and Google API configuration.") from None
     programmes = {}
-    for event in events:
-        programmes.setdefault(event["programme"], set()).add(event["section"])
+    for programme, section in events.sections:
+        programmes.setdefault(programme, set()).add(section)
     return {key: sorted(value) for key, value in sorted(programmes.items())}
 
 
@@ -312,6 +312,7 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
             )
         )
     )
+    completed_run = next((run for run in runs if run.status != "running"), None)
     return {
         "programme": source.programme,
         "timetables": source_listing(source),
@@ -327,6 +328,7 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
         "calendar_id": source.calendar_id,
         "last_synced_at": source.last_synced_at.isoformat() + "Z" if source.last_synced_at else None,
         "last_error": source.last_error,
+        "sync_warning": completed_run.message if completed_run and completed_run.status == "partial" else None,
         "google_reconnect_required": bool(runs and runs[0].status == "reconnect_required"),
         "event_count": sum(not event.cancelled for event in events),
         "watch_active": settings().primary_timetable_enabled and bool(watches),

@@ -28,10 +28,10 @@ def workbook():
     return book, sheet
 
 
-def parse(book):
+def parse(book, **kwargs):
     buffer = BytesIO()
     book.save(buffer)
-    return parse_sheet(read_excel(buffer.getvalue()))
+    return parse_sheet(read_excel(buffer.getvalue()), **kwargs)
 
 
 def test_grid_sections_and_cell_specific_times_rooms_and_reservations():
@@ -197,3 +197,102 @@ def test_unnumbered_dissertation_is_not_silently_skipped():
     sheet["Y9"] = "Dissertation Module-I\nProf. Example"
     with pytest.raises(ValueError, match="row 9, column 25"):
         parse(book)
+
+
+@pytest.mark.parametrize("label", ["OD-Make-up-Quiz", "OD – Make up Quiz", "od-Makeup-quiz"])
+def test_live_l32_unnumbered_makeup_quiz_and_notation_variants(label):
+    book, sheet = workbook()
+    sheet["B32"] = date(2026, 10, 30)
+    sheet["L32"] = label + "\n04:50 to 05:02 p.m."
+    event = parse(book)[0]
+    assert event["payload"]["summary"] == "OD-Make-up-Quiz"
+    assert event["section"] == "B"
+    assert event["payload"]["start"]["dateTime"] == "2026-10-30T16:50:00+05:30"
+    assert event["payload"]["end"]["dateTime"] == "2026-10-30T17:02:00+05:30"
+    sheet["L32"] = None
+    sheet["K8"] = "OD-Make-up-Quiz\n04:15 pm to 04:30 pm\nCR-B2"
+    assert parse(book)[0]["row_id"] == event["row_id"]
+
+
+def test_makeup_quiz_rich_text_cancellation_preserves_other_class():
+    book, sheet = workbook()
+    sheet["D7"] = CellRichText(
+        TextBlock(InlineFont(strike=True), "OD—Make-up-Quiz\n04:50 to 05:02 pm"),
+        "\n--------\nCF-8\nProf. Example",
+    )
+    assert [(e["payload"]["summary"], e["cancelled"]) for e in parse(book)] == [
+        ("OD-Make-up-Quiz", True),
+        ("CF-8", False),
+    ]
+
+
+@pytest.mark.parametrize("label", ["OD-Quiz", "OD-Make-up-Quiz", "CF-Presentation"])
+def test_unnumbered_activities_require_explicit_times(label):
+    book, sheet = workbook()
+    sheet["D7"] = label
+    with pytest.raises(ValueError, match="needs its own time"):
+        parse(book)
+
+
+def test_room_reservations_and_booking_times_do_not_become_class_times():
+    book, sheet = workbook()
+    sheet["D7"] = "B-1 Classroom Booked for TEDx"
+    sheet["I7"] = "C-1 Classroom Booked for TEDx"
+    sheet["G7"] = "CF-18\nProf. Example\n----------\n(04:15 pm to 05:30 pm)\nBooked for BC-I"
+    events = parse(book)
+    assert len(events) == 1
+    assert events[0]["payload"]["summary"] == "CF-18"
+    assert events[0]["payload"]["start"]["dateTime"][11:16] == "14:45"
+    assert events[0]["payload"]["end"]["dateTime"][11:16] == "16:00"
+
+
+@pytest.mark.parametrize("text", ["Unknown future format", "ME-1\n--------\nUnknown future format", "ME-1\n----\nME-2"])
+def test_tolerant_grid_preserves_choices_and_quarantines_entire_affected_section(text):
+    book, sheet = workbook()
+    sheet["D7"] = text
+    sheet["E7"] = "ME-1"
+    sheet["I7"] = "CF-1"
+    events = parse(book, tolerant=True)
+    assert [(e["section"], e["payload"]["summary"]) for e in events] == [("B", "CF-1")]
+    assert events.issues[0]["row"] == 7
+    assert events.issues[0]["column"] == 4
+    assert events.issues[0]["section"] == "A"
+    assert ("MBA", "A") in events.sections
+    assert ("MBA Analytics", "F") in events.sections
+
+
+def test_all_unreadable_dated_cells_return_diagnostics_in_tolerant_mode():
+    book, sheet = workbook()
+    sheet["D7"] = "Unknown future format"
+    events = parse(book, tolerant=True)
+    assert events == []
+    assert events.issues
+
+
+@pytest.mark.parametrize("merge", ["D7:D8", "D7:J7"])
+def test_ambiguous_merged_dates_or_sections_stay_fatal_even_with_explicit_time(merge):
+    book, sheet = workbook()
+    sheet["D7"] = "ME-1\n09:15 am to 10:30 am"
+    sheet.merge_cells(merge)
+    with pytest.raises(ValueError, match="merged class spans"):
+        parse(book, tolerant=True)
+
+
+@pytest.mark.parametrize("raw_date", [None, "date to be confirmed"])
+def test_unknown_format_on_undated_row_inside_grid_cannot_disappear(raw_date):
+    book, sheet = workbook()
+    sheet["B7"] = raw_date
+    sheet["D7"] = "New activity format"
+    sheet["D8"] = "ME-1"
+    with pytest.raises(ValueError, match="unreadable date"):
+        parse(book, tolerant=True)
+
+
+@pytest.mark.parametrize("separator", ["..........", "________", "========", "••••••"])
+def test_unknown_follow_on_entry_cannot_override_preceding_class_time(separator):
+    book, sheet = workbook()
+    sheet["D7"] = "ME-1\nProf. Example\n" + separator + "\nA new activity\n04:15 pm to 04:30 pm"
+    sheet["I7"] = "CF-1"
+    events = parse(book, tolerant=True)
+    assert events.issues[0]["section"] == "A"
+    assert [event["section"] for event in events] == ["B"]
