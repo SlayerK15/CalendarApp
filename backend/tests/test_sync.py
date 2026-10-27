@@ -41,6 +41,25 @@ class FakeGoogle:
         self.remote[event_id] = copy.deepcopy(payload)
 
 
+def test_central_timetable_sync_does_not_read_student_drive(db, monkeypatch):
+    import app.sync as sync
+    from app.config import settings
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "master@example.com")
+    settings.cache_clear()
+    google = FakeGoogle()
+
+    def forbidden(*_):
+        pytest.fail("Student Drive must not be read")
+
+    google.sheet = forbidden
+    monkeypatch.setattr(sync, "shared_timetable", lambda _: parse_sheet([HEADER, ROW]))
+    try:
+        assert apply_sync(db, db.get(Source, "source"), google) == "success"
+        assert len(google.calls) == 1
+    finally:
+        settings.cache_clear()
+
+
 @pytest.fixture
 def db():
     engine = create_engine("sqlite://")

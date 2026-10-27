@@ -23,6 +23,8 @@ from app.google import Google, GooglePermissionRequired
 from app.jobs.renew_google_watch import renew_source
 from app.locks import source_lock
 from app.models import AuthFlow, Event, Session, Source, SyncRun, User, Watch
+from app.models import MasterTimetableAccount
+from app.master_timetable import MasterTimetableUnavailable, reader_account, shared_timetable
 from app.timetables import managed_event, read_timetables, source_listing
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
@@ -109,6 +111,17 @@ def health_db(db: DBSession = Depends(get_db)):
 
 @app.post("/api/auth/google/start")
 def auth_start(response: Response, db: DBSession = Depends(get_db)):
+    return start_auth(response, db, "login")
+
+
+@app.post("/api/admin/timetable/connect")
+def connect_master(response: Response, user: User = Depends(current_user), db: DBSession = Depends(get_db)):
+    if not settings().master_timetable_email or user.email.lower() != settings().master_timetable_email.strip().lower():
+        raise HTTPException(403, "Only the configured master account can connect the timetable reader.")
+    return start_auth(response, db, "master", user.id)
+
+
+def start_auth(response, db, purpose, user_id=None):
     config = settings()
     if not all(
         (config.google_client_id, config.google_client_secret, config.google_redirect_uri, config.token_encryption_key)
@@ -121,6 +134,8 @@ def auth_start(response: Response, db: DBSession = Depends(get_db)):
             binding=digest(binding),
             verifier=encrypt(verifier),
             expires_at=utcnow() + timedelta(minutes=10),
+            purpose=purpose,
+            user_id=user_id,
         )
     )
     db.commit()
@@ -130,7 +145,11 @@ def auth_start(response: Response, db: DBSession = Depends(get_db)):
             "client_id": config.google_client_id,
             "redirect_uri": config.google_redirect_uri,
             "response_type": "code",
-            "scope": "openid email profile https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+            "scope": (
+                "openid email profile https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly"
+                if purpose == "master"
+                else "openid email profile https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist.readonly"
+            ),
             "access_type": "offline",
             "prompt": "consent",
             "state": state,
@@ -178,7 +197,30 @@ def auth_callback(state: str = "", code: str = "", error: str = "", db: DBSessio
             )
             profile_response.raise_for_status()
             profile = profile_response.json()
+        if flow.purpose == "master":
+            email = settings().master_timetable_email.strip().lower()
+            if not email or profile.get("email", "").lower() != email or profile.get("email_verified") is not True:
+                raise ValueError("Use the configured master account")
+            if not token.get("refresh_token"):
+                raise ValueError("Offline master access required")
+            if "https://www.googleapis.com/auth/drive.readonly" not in token.get("scope", "").split():
+                raise ValueError("Master Drive permission required")
+            token["expires_at"] = time.time() + token["expires_in"]
+            if not flow.user_id or profile["sub"] != flow.user_id:
+                raise ValueError("Master identity changed during authorization")
+            # The OAuth cookie belongs to the frontend host. Defer installing
+            # this grant until that browser redeems its ticket through /api.
+            flow.pending_tokens = encrypt({"email": email, "subject": profile["sub"], "tokens": token})
+            ticket = secrets.token_urlsafe(32)
+            flow.ticket, flow.expires_at = digest(ticket), utcnow() + timedelta(minutes=2)
+            db.commit()
+            return RedirectResponse(settings().frontend_url + "/auth/complete#ticket=" + ticket, status_code=303)
         user = db.get(User, profile["sub"])
+        if user and user.email.lower() == settings().master_timetable_email.strip().lower():
+            try:
+                reader_account(db)
+            except MasterTimetableUnavailable:
+                pass
         if user and not token.get("refresh_token"):
             token["refresh_token"] = decrypt(user.tokens).get("refresh_token")
         if not token.get("refresh_token"):
@@ -214,6 +256,16 @@ def exchange(body: Exchange, request: Request, response: Response, db: DBSession
         or not secrets.compare_digest(flow.binding, digest(request.cookies.get("lt_oauth", "")))
     ):
         raise HTTPException(400, "Login expired or browser mismatch. Please sign in again.")
+    if flow.purpose == "master":
+        pending = decrypt(flow.pending_tokens) if flow.pending_tokens else {}
+        user = db.get(User, flow.user_id)
+        email = settings().master_timetable_email.strip().lower()
+        if (
+            not email or not user or user.email.lower() != email
+            or pending.get("email") != email or pending.get("subject") != user.id
+        ):
+            raise HTTPException(400, "Master connection expired. Start again from the dashboard.")
+        db.merge(MasterTimetableAccount(email=email, subject=user.id, tokens=encrypt(pending["tokens"])))
     token = secrets.token_urlsafe(32)
     db.add(Session(token_hash=digest(token), user_id=flow.user_id, expires_at=utcnow() + timedelta(days=30)))
     db.delete(flow)
@@ -235,14 +287,24 @@ def logout(request: Request, response: Response, db: DBSession = Depends(get_db)
 
 @app.get("/api/me")
 def me(user: User = Depends(current_user)):
-    return {"name": user.name, "email": user.email}
+    return {
+        "name": user.name,
+        "email": user.email,
+        "is_timetable_admin": bool(
+            settings().master_timetable_email
+            and user.email.lower() == settings().master_timetable_email.strip().lower()
+        ),
+    }
 
 
 @app.get("/api/options")
 def options(user: User = Depends(current_user), db: DBSession = Depends(get_db)):
     try:
-        with Google(db, user) as google:
-            events = read_timetables(google, user_source(db, user))
+        if settings().master_timetable_email or settings().production:
+            events = shared_timetable(db)
+        else:
+            with Google(db, user) as google:
+                events = read_timetables(google, user_source(db, user))
     except GooglePermissionRequired as exc:
         raise HTTPException(403, {"message": str(exc), "code": "google_reconnect_required"}) from None
     except ValueError as exc:
@@ -360,7 +422,7 @@ def webhook(request: Request, tasks: BackgroundTasks, db: DBSession = Depends(ge
     if not watch.resource_id and state != "sync":
         raise HTTPException(409, "Watch registration in progress")
     source = db.get(Source, watch.source_id)
-    if not settings().primary_timetable_enabled:
+    if settings().master_timetable_email or not settings().primary_timetable_enabled:
         return {"status": "ignored"}
     source.pending = True
     db.commit()

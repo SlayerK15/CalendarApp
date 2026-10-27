@@ -87,6 +87,8 @@ Follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The repository includes `render
 
 ## Architecture
 
+- Production reads the shared workbook through `MASTER_TIMETABLE_EMAIL`, with encrypted reader credentials isolated from normal logins. PostgreSQL caches parsed classes for five minutes; students authorize Calendar access only. Apply migrations through `0003` (`alembic upgrade head`), configure the email on the API and in GitHub Actions, then initialize and verify the reader. See `docs/SHEET_FORMAT.md`.
+
 - The browser calls same-origin Next.js `/api/*`. Its narrowly allowlisted server proxy uses `NEXT_PUBLIC_API_URL` to reach FastAPI. This preserves first-party HttpOnly cookies on unrelated Vercel/Render domains.
 - OAuth callback remains on FastAPI at `GOOGLE_REDIRECT_URI`. A single-use, two-minute application ticket in the URL fragment is redeemed with the initiating browser's HttpOnly binding cookie. No Google tokens reach frontend JavaScript.
 - PostgreSQL stores encrypted Google credentials, OAuth state, hashed app sessions, source configuration, watch subscriptions, event mappings, and sync logs.

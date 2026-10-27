@@ -15,6 +15,108 @@ from app.security import digest, encrypt
 from app.sync import utcnow
 
 
+def test_regular_oauth_requests_calendar_without_drive_even_with_master_query(client, monkeypatch):
+    from urllib.parse import urlparse, parse_qs
+    http, _ = client
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://api.example.com/callback")
+    settings.cache_clear()
+    response = http.post("/api/auth/google/start?purpose=master", headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 200
+    scopes = parse_qs(urlparse(response.json()["url"]).query)["scope"][0].split()
+    assert "https://www.googleapis.com/auth/calendar.app.created" in scopes
+    assert not any("drive" in scope or "spreadsheets" in scope for scope in scopes)
+
+
+def test_only_pinned_master_can_start_reader_authorization(client, monkeypatch):
+    from urllib.parse import urlparse, parse_qs
+    http, db = client
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "master@example.com")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "client")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", "https://api.example.com/callback")
+    settings.cache_clear()
+    headers = {"Origin": "http://localhost:3000"}
+    assert http.post("/api/admin/timetable/connect", headers=headers).status_code == 401
+    db.add(LoginSession(token_hash=digest("signed-in"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.commit()
+    http.cookies.set("lt_session", "signed-in")
+    assert http.post("/api/admin/timetable/connect", headers=headers).status_code == 403
+    db.get(User, "u").email = "master@example.com"
+    db.commit()
+    result = http.post("/api/admin/timetable/connect", headers=headers)
+    assert result.status_code == 200
+    scopes = parse_qs(urlparse(result.json()["url"]).query)["scope"][0].split()
+    assert "https://www.googleapis.com/auth/drive.readonly" in scopes
+    assert not any("calendar" in scope for scope in scopes)
+    assert db.scalar(select(AuthFlow)).purpose == "master"
+
+
+@pytest.mark.parametrize("profile_email,profile_subject,bound,expected", [
+    ("master@example.com", "u", True, True), ("other@example.com", "u", True, False),
+    ("master@example.com", "u", False, False), ("master@example.com", "different-user", True, False),
+])
+def test_master_callback_requires_pinned_account_and_browser_and_isolates_tokens(
+    client, monkeypatch, profile_email, profile_subject, bound, expected
+):
+    import app.main as main
+    import httpx
+    from app.models import MasterTimetableAccount
+    http, db = client
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "master@example.com")
+    settings.cache_clear()
+    original_tokens = db.get(User, "u").tokens
+    db.add(AuthFlow(state=digest("master-state"), binding=digest("browser"), verifier=encrypt("pkce"),
+                    purpose="master", user_id="u", expires_at=utcnow() + timedelta(minutes=5)))
+    db.commit()
+    db.get(User, "u").email = "master@example.com"
+    db.commit()
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def post(self, url, data):
+            return httpx.Response(200, request=httpx.Request("POST", url), json={
+                "access_token": "master-access", "refresh_token": "master-refresh", "expires_in": 3600,
+                "scope": "https://www.googleapis.com/auth/drive.readonly",
+            })
+
+        def get(self, url, headers):
+            return httpx.Response(200, request=httpx.Request("GET", url), json={
+                "sub": profile_subject, "email": profile_email, "email_verified": True,
+            })
+
+    monkeypatch.setattr(main.httpx, "Client", Client)
+    response = http.get("/api/auth/google/callback?state=master-state&code=code", follow_redirects=False)
+    # Google calls the backend domain, which cannot receive the frontend cookie.
+    # No grant may be installed until the first-party exchange checks it.
+    assert db.get(MasterTimetableAccount, "master@example.com") is None
+    assert "master-access" not in response.text
+    location = response.headers["location"]
+    if profile_email != "master@example.com" or profile_subject != "u":
+        assert "auth=failed" in location
+        return
+    assert "/auth/complete#ticket=" in location
+    ticket = location.split("#ticket=", 1)[1]
+    flow = db.scalar(select(AuthFlow))
+    assert "master-access" not in flow.pending_tokens
+    if bound:
+        http.cookies.set("lt_oauth", "browser")
+    result = http.post("/api/auth/exchange", json={"ticket": ticket}, headers={"Origin": "http://localhost:3000"})
+    assert result.status_code == (200 if expected else 400)
+    assert bool(db.get(MasterTimetableAccount, "master@example.com")) is expected
+    assert db.get(User, "u").tokens == original_tokens
+    assert http.post("/api/auth/exchange", json={"ticket": ticket}, headers={"Origin": "http://localhost:3000"}).status_code == 400
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())

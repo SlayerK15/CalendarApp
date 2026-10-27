@@ -13,6 +13,8 @@ from app.sync import utcnow
 
 
 def renew_source(source_id):
+    if settings().master_timetable_email:
+        return  # The central reader uses the shared scheduled cache, not user Drive grants.
     if not settings().primary_timetable_enabled:
         return
     if not settings().backend_url.startswith("https://") or not settings().google_webhook_secret:

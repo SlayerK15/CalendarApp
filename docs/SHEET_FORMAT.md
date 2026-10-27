@@ -1,5 +1,17 @@
 # Timetable input contract
 
+## Central timetable reader
+
+Production reads the workbook through `MASTER_TIMETABLE_EMAIL`, not through each student's Google grant. Configure the administrator's exact Google email on the API and in the GitHub Actions secret of the same name. Regular sign-in requests identity and Calendar permissions only.
+
+Migration `0002` adds isolated encrypted reader credentials and shared parsed timetable snapshots; `0003` defers installing new reader grants until the browser-bound ticket exchange. Apply both with `alembic upgrade head`. On first use, an already-connected master's existing read-only Drive grant is copied into the isolated credential store. Otherwise the administrator signs in and uses **Connect timetable reader** on the dashboard. This separate flow verifies the configured email and browser binding, and never changes student Calendar credentials. Normal logins cannot overwrite reader credentials.
+
+PostgreSQL caches parsed classes for five minutes (`TIMETABLE_CACHE_SECONDS=300`) across web processes and scheduled workers. A database advisory lock serializes refreshes. Manual calendar sync may use a snapshot up to five minutes old. Expired-cache failures stop calendar writes and preserve previous events; students are never asked to reconnect Drive. Cell-level quarantine diagnostics remain in cached snapshots. Calendar synchronization still runs every six hours.
+
+Existing user Drive grants are not silently revoked. New authorization requests omit those scopes; users can remove their old Google grant and reconnect if desired. The OAuth project still declares scopes needed by the administrator flow. Direct source links may require college access even though viewing the timetable inside the app does not.
+
+Per-user Drive instructions below describe the legacy development adapter. Production uses this central reader. Initialize and verify the master credential before removing its old grant.
+
 The supplied file is **Term- I Class Schedule MBA & MBAA-2026-28.xlsx**, an Excel workbook stored in Google Drive. The app downloads it through Drive using the signed-in account's read-only content permission. No public sharing or conversion is required.
 
 ## College section grid

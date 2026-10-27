@@ -17,12 +17,14 @@ The privacy and terms pages describe the implemented app. The operator must revi
 | Permission | App use |
 | --- | --- |
 | openid, email, profile | Identify the signed-in account |
-| spreadsheets.readonly | Read native Google Sheets timetables |
-| drive.readonly | Download the configured Excel timetable and register change watches |
+| spreadsheets.readonly | Administrator-only connection: read native Google Sheets timetables |
+| drive.readonly | Administrator-only connection: download the configured Excel timetable |
 | calendar.app.created | Create and reconcile the app's College Timetable calendar |
 | calendar.calendarlist.readonly | Recover an app-created calendar after interrupted creation |
 
 **Drive read-only is a restricted scope**, despite allowing no writes. The server processes that data, so Google's restricted-scope verification and security assessment requirements must be reviewed. Do not describe the app as verified, or promise unrestricted public access, until Google approves the actual scope set.
+
+Regular user sign-in requests only identity and Calendar scopes. The designated master reader uses a separate administrator authorization flow and isolated encrypted credentials. This does not automatically remove old user grants or eliminate requirements associated with the administrator's restricted Drive scope.
 
 ## Console work
 

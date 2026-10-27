@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:3000"
     google_client_id: str = ""
     google_client_secret: str = ""
+    master_timetable_email: str = ""
+    timetable_cache_seconds: int = Field(default=300, ge=30, le=21600)
     google_redirect_uri: str = ""
     google_spreadsheet_id: str = "1V5A1Z-PzrLs-92YCYmFA0L9fpwWbhVuN"
     google_sheet_gid: str = "129828207"

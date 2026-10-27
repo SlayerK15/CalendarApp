@@ -21,6 +21,7 @@ jobs:
         working-directory: backend
     env:
       ENVIRONMENT: production
+      MASTER_TIMETABLE_EMAIL: ${{ secrets.MASTER_TIMETABLE_EMAIL }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       FRONTEND_URL: https://calendarapp-2r1h.onrender.com
       BACKEND_URL: https://livetimetable-api.onrender.com

@@ -11,6 +11,7 @@ from app.google import Google, GooglePermissionRequired
 from app.locks import source_lock
 from app.models import Event, Source, SyncRun, User
 from app.parser import fingerprint
+from app.master_timetable import shared_timetable
 from app.timetables import event_scope, guard_timetable_removals, managed_event, read_timetables
 from app.security import digest
 
@@ -34,21 +35,28 @@ def partial_message(issues, updates):
         for issue in issues[:3]
     )
     remaining = f"; and {len(issues) - 3} more" if len(issues) > 3 else ""
-    outcome = f"{updates} calendar update(s) applied to readable timetables." if updates else "No calendar changes were made."
+    outcome = (
+        f"{updates} calendar update(s) applied to readable timetables." if updates else "No calendar changes were made."
+    )
     return (
         f"Some timetable entries need attention ({locations}{remaining}). "
-        "Existing calendar events for affected timetables were kept unchanged. "
-        + outcome
+        "Existing calendar events for affected timetables were kept unchanged. " + outcome
     )
 
 
 def apply_sync(db, source, google):
-    parsed = read_timetables(google, source)
+    parsed = (
+        shared_timetable(db)
+        if settings().master_timetable_email or settings().production
+        else read_timetables(google, source)
+    )
     issues = [i for i in parsed.issues if i["programme"] == source.programme and i["section"] == source.section]
     preserved_scopes = {issue["scope"] for issue in issues}
     selected = [
-        e for e in parsed
-        if e["programme"] == source.programme and e["section"] == source.section
+        e
+        for e in parsed
+        if e["programme"] == source.programme
+        and e["section"] == source.section
         and event_scope(e["row_id"]) not in preserved_scopes
     ]
     existing = {

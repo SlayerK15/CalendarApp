@@ -27,6 +27,22 @@ class AuthFlow(Base):
     ticket: Mapped[str | None] = mapped_column(String(64), unique=True)
     user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
     consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+    purpose: Mapped[str] = mapped_column(String(30), default="login")
+    pending_tokens: Mapped[str | None] = mapped_column(Text)
+
+
+class MasterTimetableAccount(Base):
+    __tablename__ = "master_timetable_accounts"
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(64))
+    tokens: Mapped[str] = mapped_column(Text)
+
+
+class TimetableSnapshot(Base):
+    __tablename__ = "timetable_snapshots"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime)
+    data: Mapped[dict] = mapped_column(JSON)
 
 
 class Session(Base):
