@@ -153,3 +153,25 @@ def test_expired_cache_refresh_failure_never_replaces_snapshot(db, monkeypatch):
     with pytest.raises(MasterTimetableUnavailable):
         shared_timetable(db)
     assert db.scalar(select(TimetableSnapshot)).data == old
+
+
+def test_parser_upgrade_does_not_reuse_a_fresh_quarantined_snapshot(db, monkeypatch):
+    from contextlib import nullcontext
+
+    import app.master_timetable as central
+    from app.parser import ParsedEvents
+
+    old = ParsedEvents()
+    old.issues = [{"row": 40, "column": 31, "section": "F"}]
+    updated = ParsedEvents()
+    updated.append({"row_id": "guest-session"})
+    monkeypatch.setattr(central, "Google", lambda *_: nullcontext())
+    monkeypatch.setattr(central, "TIMETABLE_PARSER_VERSION", 1)
+    monkeypatch.setattr(central, "read_timetables", lambda *_: old)
+    assert shared_timetable(db).issues == old.issues
+    monkeypatch.setattr(central, "read_timetables", lambda *_: updated)
+    assert shared_timetable(db).issues == old.issues
+    monkeypatch.setattr(central, "TIMETABLE_PARSER_VERSION", 2)
+    refreshed = shared_timetable(db)
+    assert refreshed == updated
+    assert not refreshed.issues

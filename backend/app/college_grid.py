@@ -28,6 +28,12 @@ UNNUMBERED_CLASS = re.compile(
     rf"(?P<course>{COURSE})[ \t]*-[ \t]*(?P<kind>{ACTIVITY})[ \t]*$",
     re.I | re.M,
 )
+GUEST_CLASS = re.compile(
+    r"^[ \t]*(?:\[?cancell?ed\]?[ :\-]*)?"
+    rf"(?P<course>{COURSE})[ \t]*(?:-[ \t]*|\n[ \t]*)"
+    r"(?P<kind>Guest[ \t]+Session)[ \t]*$",
+    re.I | re.M,
+)
 
 
 class GridRows(list):
@@ -42,7 +48,10 @@ class GridStructureError(ValueError):
 
 
 def class_matches(text):
-    return sorted([*CLASS.finditer(text), *UNNUMBERED_CLASS.finditer(text)], key=lambda match: match.start())
+    return sorted(
+        [*CLASS.finditer(text), *UNNUMBERED_CLASS.finditer(text), *GUEST_CLASS.finditer(text)],
+        key=lambda match: match.start(),
+    )
 
 
 def normalized_text(text):
@@ -221,7 +230,9 @@ def parse_cell(
             start <= match.start("course") < end for start, end in strike_spans.get((row_index, column), [])
         )
         slot = time_range(class_text)
-        if not number and slot is None:
+        # The workbook places unnumbered guest sessions in ordinary class
+        # columns. Quizzes and other unnumbered activities still need a time.
+        if not number and slot is None and kind_text != "Guest Session":
             raise ValueError(f"An unnumbered activity needs its own time at row {row_index + 1}, column {column + 1}")
         if slot is None:
             if not cancelled and default_active_used:

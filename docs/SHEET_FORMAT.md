@@ -21,6 +21,7 @@ The adapter recognizes the `Term-I` layout: a row of section headings followed b
 - Cell-specific times override the column's normal time. Multiple numbered entries in one cell are parsed separately.
 - Term 2 dissertation labels such as `Dissertation Module-I-1` are numbered classes; they use the column time unless the cell specifies an override. Their faculty text, merged duration, and cancellation formatting are preserved like other classes.
 - Course activities such as `OD-Make-up-Quiz`, `CF-Presentation`, and retake quizzes may omit a session number when they provide an explicit time range. Numbered activities keep using the normal slot when no override is supplied. Common dash, spacing, capitalisation and `a.m.`/`p.m.` variants are accepted.
+- Unnumbered guest sessions such as `OSCM` followed by `Guest session` on the next line use the column's normal time, unless an explicit time overrides it. They retain the guest's name in the description and support cancellations and merged duration. Additional active classes in the same cell still need their own time.
 - Whole-cell or course-label strikethrough and explicit cancellation text mark the affected event cancelled.
 - Classroom headings supply the default location; `CR-…` and `Online` override it.
 - Room reservations (including `B-1 Classroom Booked for TEDx`), holidays, no-class days and exam-week banners are excluded. A separate booking note's time does not override the preceding class's time.

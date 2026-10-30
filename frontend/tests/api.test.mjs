@@ -11,9 +11,107 @@ afterEach(() => {
   else process.env.NEXT_PUBLIC_API_URL = originalBase;
 });
 
-test('plain-text rate limits retain HTTP status and show a useful message', async () => {
+function fastRetries(t) {
+  let now = Date.now();
+  const delays = [];
+  t.mock.method(Date, 'now', () => now);
+  t.mock.method(Math, 'random', () => 0);
+  t.mock.method(globalThis, 'setTimeout', (resolve, delay) => {
+    delays.push(delay);
+    now += delay;
+    queueMicrotask(resolve);
+    return 0;
+  });
+  return delays;
+}
+
+test('persistent plain-text rate limits stop after three retries with a useful error', async t => {
+  const delays = fastRetries(t);
   globalThis.fetch = async () => new Response('Too many requests', { status: 429 });
-  await assert.rejects(api('dashboard'), error => error instanceof ApiError && error.status === 429 && /Too many requests/.test(error.message));
+  await assert.rejects(api('dashboard'), error => error instanceof ApiError && error.status === 429 && /temporarily busy/.test(error.message));
+  assert.deepEqual(delays, [5000, 15000, 30000]);
+});
+
+test('a transient rate limit recovers automatically', async t => {
+  const delays = fastRetries(t);
+  let calls = 0;
+  globalThis.fetch = async () => ++calls === 1
+    ? new Response('Too Many Requests', { status: 429 })
+    : Response.json({ name: 'Test' });
+  assert.deepEqual(await api('me'), { name: 'Test' });
+  assert.equal(calls, 2);
+  assert.deepEqual(delays, [5000]);
+});
+
+test('Retry-After seconds and HTTP dates are respected', async t => {
+  const delays = fastRetries(t);
+  const headers = ['10', new Date(Date.now() + 30000).toUTCString()];
+  let calls = 0;
+  globalThis.fetch = async () => calls < headers.length
+    ? new Response(null, { status: 429, headers: { 'Retry-After': headers[calls++] } })
+    : Response.json({ ok: true });
+  assert.deepEqual(await api('me'), { ok: true });
+  assert.equal(delays[0], 10000);
+  assert.ok(delays[1] >= 19000 && delays[1] <= 20000);
+});
+
+test('a server cooldown beyond the retry budget is reported without retrying early', async t => {
+  const delays = fastRetries(t);
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(null, { status: 429, headers: { 'Retry-After': '120' } });
+  };
+  await assert.rejects(api('dashboard'), error => error.status === 429 && /120 seconds/.test(error.message));
+  assert.equal(calls, 1);
+  assert.deepEqual(delays, []);
+});
+
+test('invalid Retry-After uses backoff and zero still waits before retrying', async t => {
+  const delays = fastRetries(t);
+  const headers = ['invalid', '0'];
+  let calls = 0;
+  globalThis.fetch = async () => calls < headers.length
+    ? new Response(null, { status: 429, headers: { 'Retry-After': headers[calls++] } })
+    : Response.json({ ok: true });
+  await api('me');
+  assert.deepEqual(delays, [5000, 1000]);
+});
+
+test('only explicitly rate-limited POSTs are replayed, preserving the body', async t => {
+  fastRetries(t);
+  const bodies = [];
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init.method, 'POST');
+    bodies.push(init.body);
+    return bodies.length === 1 ? new Response(null, { status: 429 }) : Response.json({ ok: true });
+  };
+  await api('auth/exchange', { ticket: 'test' });
+  assert.deepEqual(bodies, ['{"ticket":"test"}', '{"ticket":"test"}']);
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response(null, { status: 502 }); };
+  await assert.rejects(api('sync', {}), error => error.status === 502);
+  assert.equal(calls, 1);
+  globalThis.fetch = async () => { calls++; throw new TypeError('Network error'); };
+  await assert.rejects(api('sync', {}), /Network error/);
+  assert.equal(calls, 2);
+});
+
+test('overlapping GETs share a request but subsequent reads fetch fresh data', async () => {
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return Response.json({ version: calls }); };
+  const results = await Promise.all([api('dashboard'), api('dashboard')]);
+  assert.deepEqual(results, [{ version: 1 }, { version: 1 }]);
+  assert.equal(calls, 1);
+  assert.deepEqual(await api('dashboard'), { version: 2 });
+});
+
+test('a failed shared read can be requested again', async () => {
+  globalThis.fetch = async () => { throw new TypeError('Offline'); };
+  const results = await Promise.allSettled([api('dashboard'), api('dashboard')]);
+  assert.ok(results.every(result => result.status === 'rejected'));
+  globalThis.fetch = async () => Response.json({ recovered: true });
+  assert.deepEqual(await api('dashboard'), { recovered: true });
 });
 
 test('HTML gateway errors do not surface JSON parsing errors or raw markup', async () => {

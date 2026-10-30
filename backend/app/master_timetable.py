@@ -15,6 +15,8 @@ from app.parser import ParsedEvents
 from app.security import decrypt
 from app.timetables import read_timetables
 
+TIMETABLE_PARSER_VERSION = 2
+
 
 class MasterTimetableUnavailable(ValueError):
     pass
@@ -71,7 +73,7 @@ def shared_timetable(db):
         "worksheet": config.excel_sheet_name,
         "additional": [item.model_dump() for item in config.additional_timetables],
         "timezone": config.timetable_timezone,
-        "parser": 1,
+        "parser": TIMETABLE_PARSER_VERSION,
     }
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
 

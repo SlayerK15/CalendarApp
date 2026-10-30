@@ -234,6 +234,68 @@ def test_unnumbered_activities_require_explicit_times(label):
         parse(book)
 
 
+def test_live_row_40_guest_sessions_use_each_sections_column_time():
+    book, sheet = workbook()
+    sheet["B40"] = date(2026, 11, 7)
+    for column in ["D", "Y", "AE"]:
+        sheet[f"{column}40"] = "OSCM\nGuest session\n(Dr. Vinay Kumar Singh)"
+    events = parse(book, tolerant=True)
+    assert not events.issues
+    assert [(e["programme"], e["section"]) for e in events] == [
+        ("MBA", "A"), ("MBA Analytics", "E"), ("MBA Analytics", "F")
+    ]
+    assert [e["payload"]["start"]["dateTime"] for e in events] == [
+        "2026-11-07T09:15:00+05:30",
+        "2026-11-07T10:45:00+05:30",
+        "2026-11-07T12:15:00+05:30",
+    ]
+    assert [e["payload"]["end"]["dateTime"][11:16] for e in events] == ["10:30", "12:00", "13:30"]
+    assert all(e["payload"]["summary"] == "OSCM-Guest Session" for e in events)
+    assert all("Dr. Vinay Kumar Singh" in e["payload"]["description"] for e in events)
+
+
+def test_guest_session_identity_survives_rescheduling_and_explicit_time_override():
+    book, sheet = workbook()
+    sheet["AE7"] = "OSCM\nGuest session\n(Dr. Example)"
+    original = parse(book)[0]
+    sheet["AE7"] = None
+    sheet["AF8"] = "oscm - guest  session\n(Dr. Other)\n04:15 pm to 05:30 pm\nCR-B2"
+    updated = parse(book)[0]
+    assert updated["row_id"] == original["row_id"]
+    assert updated["payload"]["start"]["dateTime"] == "2026-09-11T16:15:00+05:30"
+    assert updated["payload"]["end"]["dateTime"] == "2026-09-11T17:30:00+05:30"
+    assert updated["payload"]["location"] == "Classroom B2"
+
+
+def test_cancelled_guest_session_keeps_replacement_class_and_merged_duration():
+    book, sheet = workbook()
+    sheet["D7"] = CellRichText(
+        TextBlock(InlineFont(strike=True), "OSCM\nGuest session\n(Dr. Example)"),
+        "\n----------\nOSCM-9\nProf. Replacement",
+    )
+    sheet.merge_cells("D7:E7")
+    events = parse(book)
+    assert [(e["payload"]["summary"], e["cancelled"]) for e in events] == [
+        ("OSCM-Guest Session", True), ("OSCM-9", False)
+    ]
+    assert all(e["payload"]["end"]["dateTime"][11:16] == "12:00" for e in events)
+
+
+def test_unnumbered_guest_session_cannot_hide_an_additional_untimed_class():
+    book, sheet = workbook()
+    sheet["D7"] = "OSCM-9\nProf. Example\n----------\nOSCM\nGuest session\n(Dr. Other)"
+    with pytest.raises(ValueError, match="extra class needs its own time"):
+        parse(book)
+
+
+@pytest.mark.parametrize("label", ["OSCM", "OSCM\nGuest lecture", "OSCM\nSession to be confirmed"])
+def test_guest_session_support_does_not_accept_unknown_unnumbered_classes(label):
+    book, sheet = workbook()
+    sheet["D7"] = label
+    with pytest.raises(ValueError, match="Unrecognized timetable entry"):
+        parse(book)
+
+
 def test_room_reservations_and_booking_times_do_not_become_class_times():
     book, sheet = workbook()
     sheet["D7"] = "B-1 Classroom Booked for TEDx"
