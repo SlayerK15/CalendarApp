@@ -10,6 +10,7 @@ from app.jobs.renew_google_watch import renew_source
 from app.models import AuthFlow, Session, Source, SyncBatch, SyncRun
 from app.sync import sync_source, utcnow
 from app.batch_sync import queue_shared_sync, run_shared_sync
+from app.account_notices import refresh_notice_safely
 
 BATCH_SIZE = 100
 
@@ -43,6 +44,7 @@ def main():
         db.execute(delete(SyncRun).where(SyncRun.started_at < utcnow() - timedelta(days=30)))
         db.execute(delete(SyncBatch).where(SyncBatch.finished_at < utcnow() - timedelta(days=30)))
         db.commit()
+        refresh_notice_safely(db)
         if settings().master_timetable_email or settings().production:
             batch = queue_shared_sync(db)
             result = run_shared_sync(batch.id)

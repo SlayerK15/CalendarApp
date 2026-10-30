@@ -15,13 +15,20 @@ from app.master_timetable import shared_timetable
 from app.models import Source, SyncBatch
 from app.parser import ParsedEvents
 from app.sync import sync_source, utcnow
+from app.account_notices import calendar_ready, refresh_notice_safely
 
 logger = logging.getLogger(__name__)
 ACTIVE = ("queued", "running")
 
 
-def batch_summary(batch):
-    counts = Counter(batch.outcomes.values())
+def batch_summary(batch, db=None):
+    outcomes = dict(batch.outcomes)
+    if db is not None:
+        # A user's successful reconnection may occur after this batch finished.
+        for source in db.scalars(select(Source).where(Source.id.in_(batch.source_ids))):
+            if outcomes.get(source.id) == "reconnect_required" and calendar_ready(source, batch.requested_at):
+                outcomes[source.id] = "success"
+    counts = Counter(outcomes.values())
     return {
         "id": batch.id,
         "status": batch.status,
@@ -85,6 +92,7 @@ def run_shared_sync(batch_id):
             batch.status = "running"
             batch.started_at = batch.started_at or utcnow()
             db.commit()
+            refresh_notice_safely(db, start=True)
             if batch.snapshot is None:
                 try:
                     parsed = shared_timetable(db, force_refresh=True)
@@ -111,6 +119,7 @@ def run_shared_sync(batch_id):
                     sid, outcome = tasks[task], task.result()
                     batch.outcomes = {**batch.outcomes, sid: outcome}
                     db.commit()
+                    refresh_notice_safely(db, start=True)
             if "busy" in batch.outcomes.values():
                 batch.status = "queued"
                 batch.message = "Some accounts are still syncing. Retry Sync all accounts or wait for the scheduled retry."

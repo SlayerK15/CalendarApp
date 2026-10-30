@@ -29,6 +29,7 @@ from app.timetables import managed_event, read_timetables, source_listing
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
 from app.batch_sync import batch_summary, latest_batch, queue_shared_sync, run_shared_sync
+from app.account_notices import notice_payloads
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +254,7 @@ class Exchange(BaseModel):
 
 
 @app.post("/api/auth/exchange")
-def exchange(body: Exchange, request: Request, response: Response, db: DBSession = Depends(get_db)):
+def exchange(body: Exchange, request: Request, response: Response, tasks: BackgroundTasks, db: DBSession = Depends(get_db)):
     flow = db.scalar(select(AuthFlow).where(AuthFlow.ticket == digest(body.ticket)).with_for_update())
     if (
         not flow
@@ -278,6 +279,19 @@ def exchange(body: Exchange, request: Request, response: Response, db: DBSession
     db.commit()
     cookie(response, "lt_session", token, 30 * 86400)
     response.delete_cookie("lt_oauth", path="/")
+    # Reconnecting should restore updates without requiring another Sync click.
+    source = db.scalar(select(Source).where(Source.user_id == flow.user_id, Source.active.is_(True)))
+    if source:
+        try:
+            source.pending = True
+            db.commit()
+            if is_timetable_admin(db.get(User, flow.user_id)):
+                queue_all_accounts(tasks, db)
+            else:
+                tasks.add_task(reconcile, source.id)
+        except Exception as exc:
+            db.rollback()
+            logger.warning("post_login_sync_queued_for_cron type=%s", type(exc).__name__)
     return {"ok": True}
 
 
@@ -392,8 +406,11 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
     )
     completed_run = next((run for run in runs if run.status != "running"), None)
     batch = latest_batch(db) if is_timetable_admin(user) else None
+    account_notice, notice_campaign = notice_payloads(db, user.id, admin=is_timetable_admin(user))
     return {
-        "shared_sync": batch_summary(batch) if batch else None,
+        "shared_sync": batch_summary(batch, db) if batch else None,
+        "account_notice": account_notice,
+        "notice_campaign": notice_campaign,
         "programme": source.programme,
         "timetables": source_listing(source),
         "timetable_timezone": settings().timetable_timezone,

@@ -512,3 +512,24 @@ def test_updating_main_accounts_class_selection_also_updates_every_account(clien
     assert db.get(Source, "s").programme == "MBA Analytics"
     assert db.get(Source, "s").section == "F"
     assert db.get(SyncBatch, calls[0]).source_ids == ["s"]
+
+
+def test_reconnection_automatically_retries_active_accounts_sync(client, monkeypatch):
+    import app.main as main
+
+    http, db = client
+    db.get(Source, "s").active = True
+    db.add(AuthFlow(state=digest("restore-state"), binding=digest("browser"), verifier=encrypt("pkce"),
+                    ticket=digest("restore-ticket"), user_id="u", consumed=True,
+                    expires_at=utcnow() + timedelta(minutes=1)))
+    db.commit()
+    http.cookies.set("lt_oauth", "browser")
+    calls = []
+    monkeypatch.setattr(main, "reconcile", lambda source_id: calls.append(source_id))
+    response = http.post("/api/auth/exchange", json={"ticket": "restore-ticket"},
+                         headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 200
+    assert calls == ["s"] and db.get(Source, "s").pending
+    assert http.post("/api/auth/exchange", json={"ticket": "restore-ticket"},
+                     headers={"Origin": "http://localhost:3000"}).status_code == 400
+    assert calls == ["s"]

@@ -14,6 +14,7 @@ from app.parser import fingerprint
 from app.master_timetable import shared_timetable
 from app.timetables import event_scope, guard_timetable_removals, managed_event, read_timetables
 from app.security import digest
+from app.account_notices import refresh_notice_safely
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,8 @@ def sync_source(source_id, parsed=None):
                 source.last_error = None
                 run.status, run.message = result, getattr(result, "message", "Reconciliation completed")
                 db.commit()
+                if result in {"success", "unchanged"}:
+                    refresh_notice_safely(db)
                 logger.info("sync source=%s status=%s", source_id, result)
                 return result
             except Exception as exc:

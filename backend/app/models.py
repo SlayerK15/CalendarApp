@@ -107,3 +107,14 @@ class SyncBatch(Base):
     source_ids: Mapped[list] = mapped_column(JSON)
     outcomes: Mapped[dict] = mapped_column(JSON, default=dict)
     snapshot: Mapped[dict | None] = mapped_column(JSON)
+
+
+class AccountNoticeCampaign(Base):
+    __tablename__ = "account_notice_campaigns"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closure_reason: Mapped[str | None] = mapped_column(String(30))
+    targets: Mapped[dict] = mapped_column(JSON)
+    resolved_user_ids: Mapped[list] = mapped_column(JSON, default=list)
