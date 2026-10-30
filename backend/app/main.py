@@ -28,6 +28,7 @@ from app.master_timetable import MasterTimetableUnavailable, reader_account, sha
 from app.timetables import managed_event, read_timetables, source_listing
 from app.security import decrypt, digest, encrypt
 from app.sync import sync_source, utcnow
+from app.batch_sync import batch_summary, latest_batch, queue_shared_sync, run_shared_sync
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,11 @@ def current_user(request: Request, db: DBSession = Depends(get_db)):
     return user
 
 
+def is_timetable_admin(user):
+    email = settings().master_timetable_email.strip().lower()
+    return bool(email and user.email.strip().lower() == email)
+
+
 def user_source(db, user):
     source = db.scalar(select(Source).where(Source.user_id == user.id))
     if not source:
@@ -116,7 +122,7 @@ def auth_start(response: Response, db: DBSession = Depends(get_db)):
 
 @app.post("/api/admin/timetable/connect")
 def connect_master(response: Response, user: User = Depends(current_user), db: DBSession = Depends(get_db)):
-    if not settings().master_timetable_email or user.email.lower() != settings().master_timetable_email.strip().lower():
+    if not is_timetable_admin(user):
         raise HTTPException(403, "Only the configured master account can connect the timetable reader.")
     return start_auth(response, db, "master", user.id)
 
@@ -290,10 +296,7 @@ def me(user: User = Depends(current_user)):
     return {
         "name": user.name,
         "email": user.email,
-        "is_timetable_admin": bool(
-            settings().master_timetable_email
-            and user.email.lower() == settings().master_timetable_email.strip().lower()
-        ),
+        "is_timetable_admin": is_timetable_admin(user),
     }
 
 
@@ -331,6 +334,15 @@ def reconcile(source_id):
         pass  # Cron retries registration independently of calendar sync.
 
 
+def queue_all_accounts(tasks, db):
+    try:
+        batch = queue_shared_sync(db)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    tasks.add_task(run_shared_sync, batch.id)
+    return {"status": "queued", "scope": "all", "batch": batch_summary(batch)}
+
+
 @app.post("/api/subscription")
 def subscribe(
     body: Selection, tasks: BackgroundTasks, user: User = Depends(current_user), db: DBSession = Depends(get_db)
@@ -345,19 +357,23 @@ def subscribe(
         source.programme, source.section, source.active, source.pending = body.programme, body.section, True, True
         source.fingerprint = None
         db.commit()
+    if is_timetable_admin(user):
+        return queue_all_accounts(tasks, db)
     tasks.add_task(reconcile, source.id)
     return {"status": "queued"}
 
 
 @app.post("/api/sync", status_code=202)
 def manual_sync(tasks: BackgroundTasks, user: User = Depends(current_user), db: DBSession = Depends(get_db)):
+    if is_timetable_admin(user):
+        return queue_all_accounts(tasks, db)
     source = user_source(db, user)
     if not source.active:
         raise HTTPException(400, "Select your programme and section first")
     source.pending = True
     db.commit()
     tasks.add_task(reconcile, source.id)
-    return {"status": "queued"}
+    return {"status": "queued", "scope": "self"}
 
 
 @app.get("/api/dashboard")
@@ -375,7 +391,9 @@ def dashboard(user: User = Depends(current_user), db: DBSession = Depends(get_db
         )
     )
     completed_run = next((run for run in runs if run.status != "running"), None)
+    batch = latest_batch(db) if is_timetable_admin(user) else None
     return {
+        "shared_sync": batch_summary(batch) if batch else None,
         "programme": source.programme,
         "timetables": source_listing(source),
         "timetable_timezone": settings().timetable_timezone,

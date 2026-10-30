@@ -87,7 +87,8 @@ Follow [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The repository includes `render
 
 ## Architecture
 
-- Production reads the shared workbook through `MASTER_TIMETABLE_EMAIL`, with encrypted reader credentials isolated from normal logins. PostgreSQL caches parsed classes for five minutes; students authorize Calendar access only. Apply migrations through `0003` (`alembic upgrade head`), configure the email on the API and in GitHub Actions, then initialize and verify the reader. See `docs/SHEET_FORMAT.md`.
+- Production reads the shared workbook through `MASTER_TIMETABLE_EMAIL`, with encrypted reader credentials isolated from normal logins. PostgreSQL caches parsed classes for five minutes; students authorize Calendar access only. Apply migrations through `0004` (`alembic upgrade head`), configure the email on the API and in GitHub Actions, then initialize and verify the reader. See `docs/SHEET_FORMAT.md`.
+- The main account's **Sync all accounts** action forces a fresh timetable read and immediately updates every active account using that same version. Updating the main account's class selection also starts this batch. Progress and counts of accounts requiring Google reconnection are shown only to the administrator. Ordinary students' **Sync now** remains personal. Batch snapshots and per-account outcomes are persisted, so the six-hour scheduled job can resume interrupted work. Invalid timetable reads preserve calendar events; revoked student Calendar grants must be reauthorized by those students.
 
 - The browser calls same-origin Next.js `/api/*`. Its narrowly allowlisted server proxy uses `NEXT_PUBLIC_API_URL` to reach FastAPI. This preserves first-party HttpOnly cookies on unrelated Vercel/Render domains.
 - OAuth callback remains on FastAPI at `GOOGLE_REDIRECT_URI`. A single-use, two-minute application ticket in the URL fragment is redeemed with the initiating browser's HttpOnly binding cookie. No Google tokens reach frontend JavaScript.

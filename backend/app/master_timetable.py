@@ -63,7 +63,7 @@ def cache_lock(db, key):
             connection.commit()
 
 
-def shared_timetable(db):
+def shared_timetable(db, *, force_refresh=False):
     config = settings()
     identity = {
         "reader": config.master_timetable_email.strip().lower(),
@@ -89,13 +89,13 @@ def shared_timetable(db):
             return result
         return None
 
-    result = cached()
+    result = None if force_refresh else cached()
     if result is not None:
         return result
     with cache_lock(db, key):
         # End an old read transaction before observing another process's fill.
         db.commit()
-        result = cached()
+        result = None if force_refresh else cached()
         if result is not None:
             return result
         try:

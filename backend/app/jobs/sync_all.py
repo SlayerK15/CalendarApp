@@ -7,8 +7,9 @@ from sqlalchemy import delete, select
 from app.config import settings
 from app.db import SessionLocal
 from app.jobs.renew_google_watch import renew_source
-from app.models import AuthFlow, Session, Source, SyncRun
+from app.models import AuthFlow, Session, Source, SyncBatch, SyncRun
 from app.sync import sync_source, utcnow
+from app.batch_sync import queue_shared_sync, run_shared_sync
 
 BATCH_SIZE = 100
 
@@ -40,7 +41,14 @@ def main():
         db.execute(delete(AuthFlow).where(AuthFlow.expires_at < utcnow()))
         db.execute(delete(Session).where(Session.expires_at < utcnow()))
         db.execute(delete(SyncRun).where(SyncRun.started_at < utcnow() - timedelta(days=30)))
+        db.execute(delete(SyncBatch).where(SyncBatch.finished_at < utcnow() - timedelta(days=30)))
         db.commit()
+        if settings().master_timetable_email or settings().production:
+            batch = queue_shared_sync(db)
+            result = run_shared_sync(batch.id)
+            if isinstance(result, dict):
+                return 1 if result["failed"] or result["reconnect_required"] else 0
+            return 1 if result == "failed" else 0
     # Each worker owns its DB session, Google client and per-source advisory lock.
     # Keyset pagination bounds memory as the number of subscriptions grows.
     with ThreadPoolExecutor(max_workers=settings().sync_max_workers) as pool:

@@ -424,3 +424,91 @@ def test_dashboard_warning_survives_running_check_and_clears_after_complete_sync
     running.status, running.message = "success", "Reconciliation completed"
     db.commit()
     assert http.get("/api/dashboard").json()["sync_warning"] is None
+
+
+def sign_in_for_sync(http, db):
+    db.add(LoginSession(token_hash=digest("sync-user"), user_id="u", expires_at=utcnow() + timedelta(hours=1)))
+    db.commit()
+    http.cookies.set("lt_session", "sync-user")
+
+
+def test_main_account_sync_queues_every_active_account_without_own_subscription(client, monkeypatch):
+    from contextlib import contextmanager
+
+    import app.batch_sync as batches
+    import app.main as main
+    from app.models import SyncBatch
+
+    http, db = client
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "TEST@example.com")
+    settings.cache_clear()
+    sign_in_for_sync(http, db)
+    db.add(User(id="other", name="Other", email="other@example.com", tokens="unused"))
+    db.add(Source(id="other-source", user_id="other", spreadsheet_id="sheet", sheet_gid="0", active=True))
+    db.commit()
+
+    @contextmanager
+    def unlocked(_):
+        yield True
+
+    monkeypatch.setattr(batches, "source_lock", unlocked)
+    calls = []
+    monkeypatch.setattr(main, "run_shared_sync", lambda batch_id: calls.append(batch_id))
+    response = http.post("/api/sync", headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 202 and response.json()["scope"] == "all"
+    batch_id = response.json()["batch"]["id"]
+    assert db.get(SyncBatch, batch_id).source_ids == ["other-source"]
+    assert calls == [batch_id]
+    assert not db.get(Source, "s").active
+    assert db.get(Source, "other-source").pending
+    again = http.post("/api/sync", headers={"Origin": "http://localhost:3000"})
+    assert again.json()["batch"]["id"] == batch_id
+    assert http.get("/api/dashboard").json()["shared_sync"]["total"] == 1
+
+
+def test_student_cannot_request_all_accounts_or_read_their_batch_status(client, monkeypatch):
+    import app.main as main
+    from app.models import SyncBatch
+
+    http, db = client
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "main@example.com")
+    settings.cache_clear()
+    sign_in_for_sync(http, db)
+    db.get(Source, "s").active = True
+    db.add(SyncBatch(id="other-batch", source_ids=["someone-else"], outcomes={}, status="running", message=""))
+    db.commit()
+    calls = []
+    monkeypatch.setattr(main, "reconcile", lambda source_id: calls.append(source_id))
+    monkeypatch.setattr(main, "queue_shared_sync", lambda *_: pytest.fail("student must not queue everyone"))
+    response = http.post("/api/sync?admin=true", json={"scope": "all"}, headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 202 and response.json()["scope"] == "self"
+    assert calls == ["s"]
+    assert http.get("/api/dashboard").json()["shared_sync"] is None
+
+
+def test_updating_main_accounts_class_selection_also_updates_every_account(client, monkeypatch):
+    from contextlib import contextmanager
+    import app.batch_sync as batches
+    import app.main as main
+    from app.models import SyncBatch
+
+    http, db = client
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "test@example.com")
+    settings.cache_clear()
+    sign_in_for_sync(http, db)
+    monkeypatch.setattr(main, "options", lambda *_: {"MBA Analytics": ["F"]})
+
+    @contextmanager
+    def unlocked(_):
+        yield True
+
+    monkeypatch.setattr(main, "source_lock", unlocked)
+    monkeypatch.setattr(batches, "source_lock", unlocked)
+    calls = []
+    monkeypatch.setattr(main, "run_shared_sync", lambda batch_id: calls.append(batch_id))
+    response = http.post("/api/subscription", json={"programme": "MBA Analytics", "section": "F"},
+                         headers={"Origin": "http://localhost:3000"})
+    assert response.status_code == 200 and response.json()["scope"] == "all"
+    assert db.get(Source, "s").programme == "MBA Analytics"
+    assert db.get(Source, "s").section == "F"
+    assert db.get(SyncBatch, calls[0]).source_ids == ["s"]

@@ -44,8 +44,8 @@ def partial_message(issues, updates):
     )
 
 
-def apply_sync(db, source, google):
-    parsed = (
+def apply_sync(db, source, google, parsed=None):
+    parsed = parsed if parsed is not None else (
         shared_timetable(db)
         if settings().master_timetable_email or settings().production
         else read_timetables(google, source)
@@ -123,7 +123,7 @@ def apply_sync(db, source, google):
     return "success"
 
 
-def sync_source(source_id):
+def sync_source(source_id, parsed=None):
     with source_lock(source_id) as acquired:
         if not acquired:
             return "busy"
@@ -138,7 +138,7 @@ def sync_source(source_id):
             db.commit()
             try:
                 with Google(db, db.get(User, source.user_id)) as google:
-                    result = apply_sync(db, source, google)
+                    result = apply_sync(db, source, google, parsed)
                 # Last sync remains the last complete read of the selection.
                 # Partial checks and their retained events are visible in runs.
                 if result != "partial":

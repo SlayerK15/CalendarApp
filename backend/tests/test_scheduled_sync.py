@@ -1,6 +1,8 @@
 from collections import Counter
 from threading import Lock
 
+import pytest
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -61,3 +63,26 @@ def test_expired_authorization_keeps_job_failed_without_duplicate_refresh(monkey
     monkeypatch.setattr(job, "renew_source", lambda source_id: calls.append(source_id))
     assert job.reconcile_one("source")
     assert calls == []
+
+
+def test_central_schedule_resumes_the_same_persisted_batch_as_the_admin_request(monkeypatch):
+    from types import SimpleNamespace
+    import app.jobs.sync_all as job
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(engine)
+    monkeypatch.setenv("MASTER_TIMETABLE_EMAIL", "master@example.com")
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    settings.cache_clear()
+    calls = []
+    monkeypatch.setattr(job, "SessionLocal", sessions)
+    monkeypatch.setattr(job, "queue_shared_sync", lambda _: SimpleNamespace(id="durable-batch"))
+    monkeypatch.setattr(job, "run_shared_sync", lambda batch_id: calls.append(batch_id) or {"failed": 0, "reconnect_required": 1})
+    monkeypatch.setattr(job, "reconcile_one", lambda _: pytest.fail("must not start a second per-user loop"))
+    try:
+        assert job.main() == 1
+        assert calls == ["durable-batch"]
+    finally:
+        settings.cache_clear()
+        engine.dispose()

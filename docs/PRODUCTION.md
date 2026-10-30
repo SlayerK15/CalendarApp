@@ -87,3 +87,21 @@ The previous frontend fix only displayed non-JSON errors. The new local fix retr
 The connected Term 2 workbook (modified 30 October 2026) contains `OSCM`, `Guest session`, and `(Dr. Vinay Kumar Singh)` on separate lines at D40, Y40, and AE40, dated 7 November. The old parser quarantined sections A, E, and F because these classes have no session number. The local fix recognizes this specific guest-session format, uses each column's time unless explicitly overridden, and retains cancellation, merged-duration, and additional-class safeguards. The shared snapshot's parser version is increased so a deployment immediately reads past cached quarantine diagnostics.
 
 Read-only validation against the downloaded `Term-II` worksheet now parses 949 entries across all six sections with zero issues. All 476 entries previously returned from readable sections retain identical IDs and payloads. This validates parsing only; these changes have not been deployed and no Google Calendar writes were made during diagnosis.
+
+## 31 October 2026 approved release and sync verification
+
+Following explicit approval to publish and deploy both fixes, commit `a64ac7d9d61224e060cc2b273385f545c05183c9` was pushed to `main`. [GitHub CI passed](https://github.com/SlayerK15/CalendarApp/actions/runs/41142540332). Render reported both the API (`dep-dbii6tvf3r2c73bfknv0`) and frontend (`dep-dbii6pfb9u1s73aprit0`) live on that exact commit. API health, database health, and the frontend home page returned HTTP 200; the signed-out frontend API proxy returned the expected HTTP 401.
+
+The authenticated MBA Analytics F dashboard was reloaded and its Sync now action retried. It showed “Timetable synced / Reconciliation completed”, last sync 31 October 2026 at 04:40:50 IST, and 152 scheduled classes. The current row 40 warning cleared. The calendar view displayed `OSCM-Guest Session` on 7 November, 12:15–13:30 IST, in Classroom C2. Previous failed/partial run messages remain in activity history. The local-only deployment notes above describe the state before this approved release.
+
+## 31 October 2026 automatic sync configuration repair
+
+The all-account GitHub sync workflow was scheduled, but its `MASTER_TIMETABLE_EMAIL` secret was missing. The [latest pre-repair scheduled run](https://github.com/SlayerK15/CalendarApp/actions/runs/41136935999) processed 10 active sources and failed all of them with `MasterTimetableUnavailable`. The existing master email from the deployed API was restored as the repository's secret of that name; credentials and permissions were unchanged.
+
+A [manual verification batch](https://github.com/SlayerK15/CalendarApp/actions/runs/41143374666) on release `a64ac7d` then processed all 10 accounts: three synchronized successfully, two were already current, and five returned `reconnect_required`. The workflow's failure status reflects those five outstanding Google authorizations, rather than the earlier missing master-reader setting. Those users must reconnect Google before their calendars can update. All active sources remain scheduled for reconciliation every six hours; the dashboard's Sync now action targets only the signed-in user's source.
+
+## Main-account updates for every connected calendar
+
+The new implementation makes the pinned main account's Sync action refresh the workbook immediately and update all active accounts using the same timetable snapshot. Its class-selection updates trigger the same batch. Ordinary students retain a personal sync action. A durable `sync_batches` table (migration `0004`) records the target accounts, snapshot and per-account outcomes so interrupted work can resume. The scheduled job shares this runner. The administrator dashboard displays aggregate progress and clearly separates Google reconnection requirements from successful updates. Reading the shared spreadsheet no longer hides a student's failed Calendar authorization.
+
+Local validation passed 132 backend tests with one optional PostgreSQL test skipped, backend lint, 21 frontend tests, frontend lint, type checking, production build and a fresh migration/schema-drift check through `0004`. These changes still require production migration and deployment; release verification will be recorded separately.

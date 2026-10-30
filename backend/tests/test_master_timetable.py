@@ -175,3 +175,28 @@ def test_parser_upgrade_does_not_reuse_a_fresh_quarantined_snapshot(db, monkeypa
     refreshed = shared_timetable(db)
     assert refreshed == updated
     assert not refreshed.issues
+
+
+def test_main_account_update_forces_a_fresh_read_even_with_a_valid_cache(db, monkeypatch):
+    from contextlib import nullcontext
+
+    import app.master_timetable as central
+    from app.parser import ParsedEvents
+
+    reads = []
+
+    def read(*_):
+        reads.append(1)
+        events = ParsedEvents()
+        events.append({"row_id": f"version-{len(reads)}"})
+        return events
+
+    monkeypatch.setattr(central, "Google", lambda *_: nullcontext())
+    monkeypatch.setattr(central, "read_timetables", read)
+    first = shared_timetable(db)
+    assert shared_timetable(db) == first
+    refreshed = shared_timetable(db, force_refresh=True)
+    assert refreshed != first
+    assert refreshed[0]["row_id"] == "version-2"
+    assert shared_timetable(db) == refreshed
+    assert reads == [1, 1]

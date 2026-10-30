@@ -94,3 +94,16 @@ class SyncRun(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     status: Mapped[str] = mapped_column(String(30))
     message: Mapped[str] = mapped_column(Text)
+
+
+class SyncBatch(Base):
+    __tablename__ = "sync_batches"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(30), default="queued")
+    message: Mapped[str] = mapped_column(Text, default="")
+    source_ids: Mapped[list] = mapped_column(JSON)
+    outcomes: Mapped[dict] = mapped_column(JSON, default=dict)
+    snapshot: Mapped[dict | None] = mapped_column(JSON)

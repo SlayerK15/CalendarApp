@@ -18,7 +18,6 @@ export default function DashboardPage() {
   const [loadPending, setLoadPending] = useState(true);
   const [busy, setBusy] = useState(false);
   const [reconnectNeeded, setReconnectNeeded] = useState(false);
-  const [verifiedReconnectRun, setVerifiedReconnectRun] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [isTimetableAdmin, setIsTimetableAdmin] = useState(false);
   const refresh = useCallback(async () => {
@@ -30,13 +29,10 @@ export default function DashboardPage() {
       setData(result);
       setProgramme(result.programme || '');
       setSection(result.section || '');
-      // Check the current connection after reading the historical sync state.
-      // A successful timetable read resolves that old reconnect warning, while
-      // a later failed run must still be allowed to request reconnection.
+      // Reading the shared timetable does not validate this user's Calendar grant.
       return api<Record<string, string[]>>('options').then(available => {
         setOptions(available);
         setReconnectNeeded(false);
-        setVerifiedReconnectRun(result.runs[0]?.at ?? null);
         setLoadError('');
         setRefreshError('');
       });
@@ -53,12 +49,14 @@ export default function DashboardPage() {
     }).catch(() => {});
 
   }, [refresh, loadAttempt]);
+  const syncAllAccounts = isTimetableAdmin && data?.shared_sync !== undefined;
+  const sharedSyncActive = data?.shared_sync?.status === 'running' || data?.shared_sync?.status === 'queued';
   useEffect(() => {
     const poll = () => { if (!document.hidden) void refresh(); };
-    const interval = setInterval(poll, data?.sync_in_progress ? 10000 : 300000);
+    const interval = setInterval(poll, data?.sync_in_progress || sharedSyncActive ? 10000 : 300000);
     document.addEventListener('visibilitychange', poll);
     return () => { clearInterval(interval); document.removeEventListener('visibilitychange', poll); };
-  }, [refresh, data?.sync_in_progress]);
+  }, [refresh, data?.sync_in_progress, sharedSyncActive]);
   async function reconnect() {
     setBusy(true);
     try { const result = await api<{url: string}>('auth/google/start', {}); location.assign(result.url); }
@@ -71,19 +69,35 @@ export default function DashboardPage() {
   }
   async function action(path: string, body: unknown = {}) {
     setBusy(true); setError(''); setNotice('');
-    try { await api(path, body); setNotice('Sync requested. This page will update when it finishes.'); await refresh(); }
+    try {
+      const result = await api<{scope?: string}>(path, body);
+      setNotice(result.scope === 'all' ? 'Updating every connected account. Progress appears below.' : 'Sync requested. This page will update when it finishes.');
+      await refresh();
+    }
     catch (error) { setError((error as Error).message); }
     finally { setBusy(false); }
   }
   // A fresh request error takes precedence over a historical sync failure.
   // Only attach the reconnect action when the displayed error requires it.
-  const historicalReconnect = Boolean(data?.google_reconnect_required) &&
-    (!verifiedReconnectRun || verifiedReconnectRun !== data?.runs[0]?.at);
+  const historicalReconnect = Boolean(data?.google_reconnect_required);
   const requestError = error || loadError || refreshError;
   const needsReconnect = reconnectNeeded || (!requestError && historicalReconnect);
   const displayError = requestError || (historicalReconnect ? data?.last_error : '');
-  return <><header className="topbar"><Brand/><nav><span className="nav-sign">{name && `Hi, ${name}`}</span><button className="text-button" onClick={async () => { try { await api('auth/logout', {}); location.replace('/'); } catch (error) { setError((error as Error).message); } }}><LogOut size={16}/> Sign out</button></nav></header><main className="dashboard"><div className="dash-title"><div><span className="eyebrow">A LITTLE MORE IN SYNC</span><h1>Your timetable.</h1><p>Your week ahead, without the spreadsheet shuffle.</p></div><button className="secondary" disabled={!data?.active || busy || needsReconnect} onClick={() => action('sync')}><RefreshCw size={16} className={busy ? 'spin' : ''}/> Sync now</button></div>{displayError && <div className="error" role="alert">{displayError}{(loadError || refreshError) && !needsReconnect && <div style={{marginTop: 12}}><button className="secondary" disabled={loadPending || busy} onClick={() => { setLoadPending(true); setLoadAttempt(attempt => attempt + 1); }}>{loadPending ? 'Retrying…' : 'Try again'}</button></div>}{needsReconnect && <div style={{marginTop: 12}}><button className="primary" disabled={busy} onClick={reconnect}>{busy ? 'Connecting…' : 'Reconnect Google'}</button><p>Google will ask for permission to create and update your College Timetable calendar. The timetable is read through the administrator connection.</p></div>}</div>}{notice && <div className="notice" role="status">{notice}</div>}
-      {isTimetableAdmin && <section className="panel"><h2>Timetable administrator</h2><p>The shared timetable is read through your administrator connection. Student accounts only connect their calendars.</p><button className="secondary" disabled={busy} onClick={connectTimetableReader}>Connect timetable reader</button></section>}
+  return <><header className="topbar"><Brand/><nav><span className="nav-sign">{name && `Hi, ${name}`}</span><button className="text-button" onClick={async () => { try { await api('auth/logout', {}); location.replace('/'); } catch (error) { setError((error as Error).message); } }}><LogOut size={16}/> Sign out</button></nav></header><main className="dashboard"><div className="dash-title"><div><span className="eyebrow">A LITTLE MORE IN SYNC</span><h1>Your timetable.</h1><p>Your week ahead, without the spreadsheet shuffle.</p></div><button className="secondary" disabled={(!syncAllAccounts && !data?.active) || busy || data?.shared_sync?.status === 'running'} onClick={() => action('sync')}><RefreshCw size={16} className={busy ? 'spin' : ''}/> {syncAllAccounts ? 'Sync all accounts' : 'Sync now'}</button></div>{displayError && <div className="error" role="alert">{displayError}{(loadError || refreshError) && !needsReconnect && <div style={{marginTop: 12}}><button className="secondary" disabled={loadPending || busy} onClick={() => { setLoadPending(true); setLoadAttempt(attempt => attempt + 1); }}>{loadPending ? 'Retrying…' : 'Try again'}</button></div>}{needsReconnect && <div style={{marginTop: 12}}><button className="primary" disabled={busy} onClick={reconnect}>{busy ? 'Connecting…' : 'Reconnect Google'}</button><p>Google will ask for permission to create and update your College Timetable calendar. The timetable is read through the administrator connection.</p></div>}</div>}{notice && <div className="notice" role="status">{notice}</div>}
+      {isTimetableAdmin && <section className="panel">
+        <h2>Main timetable account</h2>
+        <p>{syncAllAccounts ? 'Sync all accounts reads the latest timetable through your connection, then updates every connected account automatically.' : 'The shared timetable is read through your administrator connection. Student accounts only connect their calendars.'}</p>
+        <button className="secondary" disabled={busy} onClick={connectTimetableReader}>Connect timetable reader</button>
+        {data?.shared_sync && <div style={{marginTop: 16}} role="status" aria-live="polite">
+          <strong>{data.shared_sync.status === 'running' ? 'Updating all accounts…' : data.shared_sync.status === 'queued' ? 'All-account update queued' : data.shared_sync.status === 'failed' ? 'Timetable update needs attention' : 'All-account update finished'}</strong>
+          <p>{data.shared_sync.processed} of {data.shared_sync.total} accounts checked · {data.shared_sync.up_to_date} up to date</p>
+          {data.shared_sync.reconnect_required > 0 && <p>{data.shared_sync.reconnect_required} accounts need their users to reconnect Google before their calendars can update.</p>}
+          {data.shared_sync.needs_review > 0 && <p>{data.shared_sync.needs_review} accounts have timetable entries that need review. Their affected events were preserved.</p>}
+          {data.shared_sync.failed > 0 && <p>{data.shared_sync.failed} accounts could not finish syncing. Retry Sync all accounts.</p>}
+          {data.shared_sync.skipped > 0 && <p>{data.shared_sync.skipped} accounts are no longer active and were skipped.</p>}
+          {data.shared_sync.message && <p>{data.shared_sync.message}</p>}
+        </div>}
+      </section>}
       <div className="dash-layout"><aside><section className="panel"><span className="mini-label">MAKE IT YOURS</span><h2>Your class</h2><form onSubmit={event => { event.preventDefault(); void action('subscription', {programme, section}); }}><label htmlFor="programme">Programme</label><select id="programme" value={programme} onChange={event => { setProgramme(event.target.value); setSection(''); }} required><option value="">Select programme</option>{Object.keys(options).map(value => <option key={value}>{value}</option>)}</select><label htmlFor="section">Section</label><select id="section" value={section} onChange={event => setSection(event.target.value)} disabled={!programme} required><option value="">Select section</option>{(options[programme] || []).map(value => <option key={value}>{value}</option>)}</select><button className="primary full" disabled={busy || !programme || !section}>{data?.active ? 'Update selection' : 'Connect my timetable'}<ArrowUpRight size={17}/></button></form><p className="aside-note">Your classes go into a separate <strong>College Timetable</strong> calendar.</p></section><section className="panel"><span className="mini-label">TIMETABLE SOURCES</span>{(data?.timetables || []).map(timetable => <div key={timetable.url} style={{marginTop: 14}}><a href={timetable.url} target="_blank" rel="noreferrer">{timetable.label} ↗</a><p className="aside-note">{timetable.enabled ? 'Included in your six-hour sync' : 'Awaiting file access and validation'}</p></div>)}</section><section className="panel sync-panel"><span className="mini-label">CONNECTION STATUS</span><div><CheckCircle2 size={17}/><span>Calendar</span><strong>{data?.calendar_id ? 'Connected' : 'Not connected'}</strong></div><div><RefreshCw size={17}/><span>Update mode</span><strong>{data?.sync_on_change ? (data?.watch_active ? 'Active' : 'Awaiting watch') : 'Scheduled'}</strong></div><div><Clock3 size={17}/><span>Automatic sync</span><strong>Every {Math.round((data?.sync_interval_seconds || 21600) / 3600)} hours</strong></div><p>Last sync: {data?.last_synced_at ? new Date(data.last_synced_at).toLocaleString() : 'Not yet synced'}</p></section></aside>
       <div><section className="panel schedule"><div className="schedule-title"><div><h2>{data?.active ? `${data.programme} · ${data.section}` : 'A fresh start for your schedule'}</h2><p>{data ? `${data.event_count} scheduled classes` : 'Loading your timetable…'}</p></div>{(data?.pending || data?.sync_in_progress) && <span className="status">{data?.sync_in_progress ? 'Syncing…' : 'Changes queued'}</span>}</div>{data?.last_error && !data.google_reconnect_required && <div className="error" role="alert">{data.last_error}</div>}{data?.sync_warning && <div className="notice" role="status">{data.sync_warning}</div>}{!data?.active && !data?.events.length ? <div className="empty"><span className="empty-icon"><CalendarDays size={30}/></span><h3>{data?.active ? 'Your first sync is on its way' : 'Your week belongs here'}</h3><p>{data?.active ? 'Classes will appear after the spreadsheet is read and your calendar is created.' : 'Select your programme and section to bring your classes into Google Calendar.'}</p></div> : <TimetableCalendar events={data?.events || []} timeZone={data?.timetable_timezone}/>}{data?.calendar_id && <a className="calendar-link" href={`https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(data.calendar_id)}`} target="_blank" rel="noreferrer">Open Google Calendar <ArrowUpRight size={15}/></a>}</section><section className="panel activity"><h2>Recent activity</h2>{data?.runs.length ? data.runs.map((run, index) => <div className="activity-row" key={index}><span className={`activity-dot ${['failed', 'reconnect_required'].includes(run.status) ? 'failed' : ''}`}/><div><strong>{run.status === 'unchanged' ? 'Everything is up to date' : run.status === 'success' ? 'Timetable synced' : run.status === 'running' ? 'Sync in progress' : run.status === 'partial' ? 'Timetable needs review' : 'Sync needs attention'}</strong><p>{run.message}</p></div><time>{new Date(run.at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</time></div>) : <p className="muted">Updates will appear here after your first sync.</p>}</section></div></div></main></>;
 }

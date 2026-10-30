@@ -7,6 +7,7 @@
 - The cron reads subscriptions using keyset pagination in batches of 100. `SYNC_MAX_WORKERS=2` permits two independent users to reconcile concurrently, with a configurable maximum of four. Every user has a separate DB session, Google HTTP client and PostgreSQL advisory lock.
 - Google HTTP connections are reused during reconciliation. Events retain deterministic IDs and unchanged fingerprints skip calendar writes.
 - The dashboard polls every five minutes when idle and every ten seconds while an import is running. Hidden tabs do not poll; returning to the tab refreshes it.
+- The pinned main account can immediately update all active calendars with **Sync all accounts**. A single forced workbook read is saved as the batch snapshot; two bounded workers reconcile each user's own selection. PostgreSQL stores per-account outcomes, so duplicate requests reuse active work and the six-hour job can resume after a process interruption. Only administrator dashboards receive aggregate batch progress. Accounts with revoked grants remain blocked on their own Google reconnection.
 - Drive watches are renewed at least twelve hours before expiry, allowing headroom for six-hour cron runs.
 - PostgreSQL holds persistent state and pending work. No worker requires a persistent local filesystem.
 

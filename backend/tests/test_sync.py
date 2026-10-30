@@ -60,6 +60,28 @@ def test_central_timetable_sync_does_not_read_student_drive(db, monkeypatch):
         settings.cache_clear()
 
 
+def test_shared_batch_snapshot_updates_each_accounts_own_section_without_rereading(db, monkeypatch):
+    import app.sync as sync
+
+    db.add(User(id="other-user", name="Other", email="other@example.com", tokens="unused"))
+    db.add(Source(
+        id="other-source", user_id="other-user", spreadsheet_id="sheet", sheet_gid="0",
+        programme="BTech", section="B", active=True,
+    ))
+    db.commit()
+    other_row = ROW.copy()
+    other_row[0], other_row[2], other_row[3] = "math-002", "B", "Section B mathematics"
+    parsed = parse_sheet([HEADER, ROW.copy(), other_row])
+    google = FakeGoogle()
+    google.sheet = lambda *_: pytest.fail("must not read student Drive")
+    monkeypatch.setattr(sync, "shared_timetable", lambda *_: pytest.fail("must use the batch's exact snapshot"))
+    assert apply_sync(db, db.get(Source, "source"), google, parsed) == "success"
+    assert apply_sync(db, db.get(Source, "other-source"), google, parsed) == "success"
+    assert [payload["summary"] for _, payload, _ in google.calls] == ["Mathematics", "Section B mathematics"]
+    assert {event.row_id for event in db.scalars(select(Event).where(Event.source_id == "source"))} == {"math-001"}
+    assert {event.row_id for event in db.scalars(select(Event).where(Event.source_id == "other-source"))} == {"math-002"}
+
+
 @pytest.fixture
 def db():
     engine = create_engine("sqlite://")
