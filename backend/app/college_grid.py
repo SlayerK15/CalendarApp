@@ -19,7 +19,8 @@ TIME_RANGE = re.compile(
 CLASS = re.compile(
     r"^[ \t]*(?:\[?cancell?ed\]?[ :\-]*)?"
     rf"(?P<course>{COURSE})"
-    rf"(?:[ \t]*[-–]?[ \t]*(?:\n[ \t]*)?(?P<kind>{ACTIVITY})[ \t]*[-–]?[ \t]*|[ \t]*[-–][ \t]*)"
+    rf"(?:[ \t]*[-–]?[ \t]*(?:\n[ \t]*)?(?P<kind>Guest[ \t]+Session|{ACTIVITY})"
+    r"[ \t]*[-–]?[ \t]*|[ \t]*[-–][ \t]*)"
     r"(?P<number>\d+(?:[ \t]*&[ \t]*\d+)?)\b",
     re.I | re.M,
 )

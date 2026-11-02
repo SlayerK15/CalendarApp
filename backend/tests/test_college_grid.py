@@ -267,6 +267,45 @@ def test_guest_session_identity_survives_rescheduling_and_explicit_time_override
     assert updated["payload"]["location"] == "Classroom B2"
 
 
+@pytest.mark.parametrize("label", ["OSCM\nGuest session 10", "OSCM-Guest Session-10", "oscm – guest  session 10"])
+def test_numbered_guest_sessions_at_live_row_40_parse_for_all_affected_sections(label):
+    book, sheet = workbook()
+    sheet["B40"] = date(2026, 11, 7)
+    for column in ["D", "Y", "AE"]:
+        sheet[f"{column}40"] = label + "\n(Dr. Vinay Kumar Singh)"
+    events = parse(book, tolerant=True)
+    assert not events.issues
+    assert [(e["programme"], e["section"]) for e in events] == [
+        ("MBA", "A"), ("MBA Analytics", "E"), ("MBA Analytics", "F")
+    ]
+    assert [e["payload"]["start"]["dateTime"] for e in events] == [
+        "2026-11-07T09:15:00+05:30",
+        "2026-11-07T10:45:00+05:30",
+        "2026-11-07T12:15:00+05:30",
+    ]
+    assert all(e["payload"]["summary"] == "OSCM-Guest Session-10" for e in events)
+    assert all("Dr. Vinay Kumar Singh" in e["payload"]["description"] for e in events)
+
+
+def test_numbered_guest_session_preserves_cancellation_merge_and_identity_after_rescheduling():
+    book, sheet = workbook()
+    sheet["AE7"] = "OSCM\nGuest session 10\n(Dr. Example)"
+    sheet["AE7"].font = Font(strike=True)
+    sheet.merge_cells("AE7:AF7")
+    original = parse(book)[0]
+    assert original["cancelled"] is True
+    assert original["payload"]["end"]["dateTime"][11:16] == "16:00"
+    sheet.unmerge_cells("AE7:AF7")
+    sheet["AE7"] = None
+    sheet["AF8"] = "oscm-guest session-10\n(Dr. Other)\n04:15 pm to 05:30 pm\nCR-B2"
+    updated = parse(book)[0]
+    assert updated["row_id"] == original["row_id"]
+    assert updated["cancelled"] is False
+    assert updated["payload"]["start"]["dateTime"] == "2026-09-11T16:15:00+05:30"
+    assert updated["payload"]["end"]["dateTime"] == "2026-09-11T17:30:00+05:30"
+    assert updated["payload"]["location"] == "Classroom B2"
+
+
 def test_cancelled_guest_session_keeps_replacement_class_and_merged_duration():
     book, sheet = workbook()
     sheet["D7"] = CellRichText(
