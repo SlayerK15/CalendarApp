@@ -60,6 +60,11 @@ def normalized_text(text):
     return text.translate(str.maketrans({"–": "-", "—": "-", "‑": "-", "−": "-", "\xa0": " ", "\r": "\n"}))
 
 
+def cell_excerpt(text, limit=120):
+    flat = " / ".join(line.strip() for line in text.splitlines() if line.strip())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
+
+
 def clock_time(value, ampm):
     digits = value.replace(".", ":")
     hours, minutes = map(int, digits.split(":")) if ":" in digits else (int(digits[:-2]), int(digits[-2:]))
@@ -181,6 +186,9 @@ def adapt_college_grid(values, *, tolerant=False):
                         "row": row_index + 1,
                         "column": column + 1,
                         "message": str(exc),
+                        # Shown only on the affected user's dashboard so a new
+                        # sheet format can be diagnosed without reader access.
+                        "text": cell_excerpt(text),
                     }
                 )
     if not date_rows or (len(result) == 1 and not result.issues):

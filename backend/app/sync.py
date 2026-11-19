@@ -33,6 +33,7 @@ class SyncResult(str):
 def partial_message(issues, updates):
     locations = "; ".join(
         f"{issue['timetable']}, row {issue['row']}, column {issue['column']}: {issue['message']}"
+        + (f' — cell reads "{issue["text"]}"' if issue.get("text") else "")
         for issue in issues[:3]
     )
     remaining = f"; and {len(issues) - 3} more" if len(issues) > 3 else ""

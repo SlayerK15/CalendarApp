@@ -455,6 +455,7 @@ def test_partial_run_records_warning_without_fatal_error_or_false_success_timest
     assert source.pending is False
     run = db.scalar(select(SyncRun).where(SyncRun.status == "partial"))
     assert "row 3, column 2" in run.message
+    assert 'cell reads "New unrecognized class notation"' in run.message
     google.rows = college_rows()
     assert sync.sync_source("source") == "success"
     assert source.last_error is None

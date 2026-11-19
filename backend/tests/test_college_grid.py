@@ -367,7 +367,7 @@ def test_all_unreadable_dated_cells_return_diagnostics_in_tolerant_mode():
     sheet["D7"] = "Unknown future format"
     events = parse(book, tolerant=True)
     assert events == []
-    assert events.issues
+    assert events.issues[0]["text"] == "Unknown future format"
 
 
 @pytest.mark.parametrize("merge", ["D7:D8", "D7:J7"])
@@ -397,3 +397,11 @@ def test_unknown_follow_on_entry_cannot_override_preceding_class_time(separator)
     events = parse(book, tolerant=True)
     assert events.issues[0]["section"] == "A"
     assert [event["section"] for event in events] == ["B"]
+
+
+def test_issue_excerpt_is_single_line_and_bounded():
+    book, sheet = workbook()
+    sheet["D7"] = "Unknown\nfuture format " + "x" * 200
+    issue = parse(book, tolerant=True).issues[0]
+    assert issue["text"].startswith("Unknown / future format x")
+    assert len(issue["text"]) == 120 and issue["text"].endswith("…")
