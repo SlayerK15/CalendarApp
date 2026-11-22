@@ -11,6 +11,13 @@ ACTIVITY = (
     r"(?:Quiz|Exam|Test|Presentation|Workshop|Tutorial|Viva|Lab|Lecture|Extra[ \t]+Session|Session)"
 )
 SECTION = re.compile(r"Section\s*-\s*([A-Z])\b", re.I)
+ROOM_ID = r"(?:[a-z]{1,3}(?:\s*-\s*[a-z]{1,3})?\s*-?\s*\d+[a-z]?)"
+ROOM_BOOKING = re.compile(
+    rf"^(?:(?:{ROOM_ID}\s+)?(?:classroom|room)(?:\s+{ROOM_ID})?|"
+    rf"{ROOM_ID}(?:\s+(?:classroom|room))?)\s+"
+    r"(?:(?:is|has\s+been)\s+)?(?:already\s+)?(?:booked|reserved)\b",
+    re.I,
+)
 TIME_RANGE = re.compile(
     r"(?P<start>\d{1,2}[.:]\d{2}|\d{4})\s*(?P<start_ampm>[ap]\.?m\.?m?)?\s*"
     r"(?:to|[-–—])\s*(?P<end>\d{1,2}[.:]\d{2}|\d{4})\s*(?P<end_ampm>[ap]\.?m\.?m?)?",
@@ -91,11 +98,11 @@ def time_range(value):
 
 def is_non_class(text):
     normalized = " ".join(text.split()).lower().strip("- .")
-    reservation = TIME_RANGE.sub("", normalized).strip(" ()-.")
+    reservation = TIME_RANGE.sub("", normalized).strip(" ()-.:;")
     return (
         not normalized
         or reservation.startswith("booked")
-        or bool(re.match(r"^(?:[a-z]\s*-?\s*\d+\s+)?(?:classroom|room)\s+(?:is\s+)?(?:booked|reserved)\b", reservation))
+        or bool(ROOM_BOOKING.match(reservation))
         or bool(re.search(r"\bno\b.*\bclasses\b", normalized))
         or bool(re.fullmatch(r"(?:mid|end)[- ]term exam week", normalized))
     )
