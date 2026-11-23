@@ -56,10 +56,20 @@ class GridStructureError(ValueError):
 
 
 def class_matches(text):
-    return sorted(
+    matches = sorted(
         [*CLASS.finditer(text), *UNNUMBERED_CLASS.finditer(text), *GUEST_CLASS.finditer(text)],
         key=lambda match: match.start(),
     )
+    # Locations such as "Online-\nStudio-5" can resemble a numbered course
+    # because the course matcher is case-insensitive. Do not parse the second
+    # line of a wrapped location as another class.
+    result = []
+    for match in matches:
+        previous_lines = text[: match.start()].rstrip().splitlines()
+        if previous_lines and re.fullmatch(r"\(?\s*(?:online|classroom|room)\s*-\s*", previous_lines[-1], re.I):
+            continue
+        result.append(match)
+    return result
 
 
 def normalized_text(text):
