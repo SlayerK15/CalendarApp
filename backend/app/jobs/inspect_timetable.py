@@ -6,6 +6,7 @@ import re
 from types import SimpleNamespace
 from urllib.parse import quote
 
+import httpx
 from sqlalchemy import select
 
 from app.config import settings
@@ -83,6 +84,12 @@ def main():
                     "missing_from_google_calendar": len(missing),
                     "payload_mismatches": len(mismatched),
                     "remote_locations": dict(Counter(event.get("location", "") for event in remote_events.values() if event.get("status") != "cancelled")),
+                })
+            except httpx.HTTPStatusError as exc:
+                calendar_audits.append({
+                    "programme": item.programme,
+                    "section": item.section,
+                    "status": f"Google Calendar HTTP {exc.response.status_code}",
                 })
             except Exception as exc:
                 calendar_audits.append({
