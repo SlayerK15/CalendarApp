@@ -66,7 +66,16 @@ def apply_sync(db, source, google, parsed=None):
     }
     guard_timetable_removals(source, existing, selected, preserved_scopes)
     current_fingerprint = fingerprint(selected)
-    if not issues and source.fingerprint == current_fingerprint:
+    calendar_recreated = False
+    if not issues:
+        if source.calendar_id:
+            calendar_recreated = not google.calendar_exists(source.calendar_id)
+            if calendar_recreated:
+                source.calendar_id = None
+                db.commit()
+        else:
+            calendar_recreated = bool(existing)
+    if not issues and not calendar_recreated and source.calendar_id and source.fingerprint == current_fingerprint:
         return "unchanged"
     if issues:
         # A partial read must never look like a fully reconciled snapshot, even
@@ -89,6 +98,7 @@ def apply_sync(db, source, google, parsed=None):
         if (
             previous
             and not item.get("deleted")
+            and not calendar_recreated
             and previous.payload == item["payload"]
             and previous.cancelled == item["cancelled"]
         ):

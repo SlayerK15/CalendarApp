@@ -27,12 +27,19 @@ class FakeGoogle:
         self.calls = []
         self.remote = {}
         self.fail = False
+        self.calendar_present = False
+        self.calendar_creations = 0
 
     def sheet(self, source):
         return self.rows
 
     def calendar(self, source):
+        self.calendar_creations += 1
+        self.calendar_present = True
         return "calendar-1"
+
+    def calendar_exists(self, calendar_id):
+        return self.calendar_present
 
     def put_event(self, calendar_id, event_id, payload, deleted=False):
         if self.fail:
@@ -128,6 +135,25 @@ def test_retry_update_cancel_same_event(db):
     apply_sync(db, source, google)
     assert google.calls[-1][1]["summary"] == "Mathematics"
     assert len(list(db.scalars(select(Event)))) == 1
+
+
+def test_missing_calendar_is_recreated_and_repopulated_even_when_timetable_is_unchanged(db):
+    source, google = db.get(Source, "source"), FakeGoogle()
+    assert apply_sync(db, source, google) == "success"
+    first_event_id = google.calls[0][0]
+    first_creation_count = google.calendar_creations
+
+    google.calendar_present = False
+    google.calls.clear()
+
+    assert apply_sync(db, source, google) == "success"
+
+    assert google.calendar_creations == first_creation_count + 1
+    assert google.calendar_present is True
+    assert len(google.calls) == 1
+    assert google.calls[0][0] == first_event_id
+    assert google.calls[0][2] is False
+    assert google.remote[first_event_id]["summary"] == "Mathematics"
 
 
 def test_failed_sheet_does_not_cancel(db):

@@ -181,6 +181,16 @@ class Google:
         )
         return result["id"]
 
+    def calendar_exists(self, calendar_id):
+        url = f"https://www.googleapis.com/calendar/v3/calendars/{quote(calendar_id, safe='')}"
+        try:
+            self.request("GET", url, params={"fields": "id"})
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return False
+            raise
+        return True
+
     def put_event(self, calendar_id, event_id, payload, deleted=False):
         url = f"https://www.googleapis.com/calendar/v3/calendars/{quote(calendar_id, safe='')}/events"
         if deleted:
