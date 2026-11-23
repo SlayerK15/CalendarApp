@@ -264,6 +264,11 @@ def parse_cell(
             if cancelled or active_end is None:
                 slot = default_slot
             else:
+                previous_end = matches[index - 1].end()
+                gap = text[previous_end : match.start()]
+                has_entry_separator = re.search(r"(?m)^[ \t]*[-._=•…]{8,}[ \t]*$", gap)
+                if not number or not has_entry_separator:
+                    raise ValueError(f"An extra class needs its own time at row {row_index + 1}, column {column + 1}")
                 start = add_minutes(active_end, 15)
                 slot = (start, add_minutes(start, regular_duration))
             if last_column != column and (cancelled or active_end is None):

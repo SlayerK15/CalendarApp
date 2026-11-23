@@ -119,7 +119,7 @@ def test_repeated_labels_are_unique_and_keep_cancelled_occurrence():
     assert [e["cancelled"] for e in result] == [True, False]
 
 
-@pytest.mark.parametrize("bad", ["Unknown schedule text", "ME-1\n----------\nME-2"])
+@pytest.mark.parametrize("bad", ["Unknown schedule text", "ME-1\n----\nME-2"])
 def test_ambiguous_cells_stop_sync(bad):
     book, sheet = workbook()
     sheet["D7"] = bad
@@ -147,6 +147,29 @@ def test_cancelled_replacement_can_share_default_slot():
         ("WOC-6", False),
     ]
     assert [e["payload"]["start"]["dateTime"][11:16] for e in result] == ["14:45", "14:45", "16:15"]
+
+
+def test_term_two_extra_class_uses_next_slot_and_does_not_need_manual_time():
+    book, sheet = workbook()
+    sheet["AF7"] = "MM-II-3\nProf. Somnath\n----------\nBC-I-13\nProf. Ravinder\n(Online)"
+
+    events = parse(book, tolerant=True)
+
+    assert not events.issues
+    assert [event["payload"]["summary"] for event in events] == ["MM-II-3", "BC-I-13"]
+    assert [event["payload"]["start"]["dateTime"][11:16] for event in events] == ["14:45", "16:15"]
+    assert [event["payload"]["end"]["dateTime"][11:16] for event in events] == ["16:00", "17:30"]
+    assert events[1]["payload"]["location"] == "Online"
+
+
+def test_additional_classes_continue_after_each_fifteen_minute_break():
+    book, sheet = workbook()
+    sheet["D7"] = "ME-1\nProf. First\n----------\nME-2\nProf. Second\n----------\nME-3\nProf. Third"
+
+    events = parse(book)
+
+    assert [event["payload"]["start"]["dateTime"][11:16] for event in events] == ["09:15", "10:45", "12:15"]
+    assert [event["payload"]["end"]["dateTime"][11:16] for event in events] == ["10:30", "12:00", "13:30"]
 
 
 def test_all_cancelled_alternatives_are_preserved():
