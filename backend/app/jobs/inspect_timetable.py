@@ -35,7 +35,7 @@ def main():
         "events_by_section": {f"{programme} / {section}": count for (programme, section), count in sorted(counts.items())},
         "target_classes_by_section": matches,
         "issues": [
-            {key: issue[key] for key in ("programme", "section", "row", "column", "message")}
+            {key: issue[key] for key in ("programme", "section", "row", "column", "message", "text")}
             for issue in parsed.issues
         ],
     }, indent=2))
