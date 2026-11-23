@@ -96,6 +96,12 @@ def time_range(value):
     return start, end
 
 
+def add_minutes(value, minutes):
+    hours, mins = map(int, value.split(":"))
+    total = hours * 60 + mins + minutes
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
 def is_non_class(text):
     normalized = " ".join(text.split()).lower().strip("- .")
     reservation = TIME_RANGE.sub("", normalized).strip(" ()-.:;")
@@ -222,7 +228,11 @@ def parse_cell(
         raise ValueError(f"Unrecognized timetable entry at row {row_index + 1}, column {column + 1}")
     if not is_non_class(text[: matches[0].start()]):
         raise ValueError(f"Unrecognized text before a class at row {row_index + 1}, column {column + 1}")
-    default_active_used = False
+    active_end = None
+    regular_duration = (
+        int(default_slot[1][:2]) * 60 + int(default_slot[1][3:])
+        - int(default_slot[0][:2]) * 60 - int(default_slot[0][3:])
+    )
     entries = []
     for index, match in enumerate(matches):
         stop = matches[index + 1].start() if index + 1 < len(matches) else len(text)
@@ -251,12 +261,12 @@ def parse_cell(
         if not number and slot is None and kind_text != "Guest Session":
             raise ValueError(f"An unnumbered activity needs its own time at row {row_index + 1}, column {column + 1}")
         if slot is None:
-            if not cancelled and default_active_used:
-                raise ValueError(f"An extra class needs its own time at row {row_index + 1}, column {column + 1}")
-            if not cancelled:
-                default_active_used = True
-            slot = default_slot
-            if last_column != column:
+            if cancelled or active_end is None:
+                slot = default_slot
+            else:
+                start = add_minutes(active_end, 15)
+                slot = (start, add_minutes(start, regular_duration))
+            if last_column != column and (cancelled or active_end is None):
                 slot = (slot[0], columns[last_column][3][1])
         override = re.search(r"\bCR\s*-\s*([A-Z]\s*-?\s*\d+)\b", class_text, re.I)
         location = "Online" if re.search(r"\bonline\b", class_text, re.I) else room
@@ -279,4 +289,6 @@ def parse_cell(
                 "cancelled" if cancelled else "scheduled",
             ]
         )
+        if not cancelled:
+            active_end = slot[1]
     return entries
