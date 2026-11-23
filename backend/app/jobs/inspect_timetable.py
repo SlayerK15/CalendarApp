@@ -4,6 +4,7 @@ import json
 from collections import Counter
 import re
 from types import SimpleNamespace
+from urllib.parse import quote
 
 from sqlalchemy import select
 
@@ -11,7 +12,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.google import Google
 from app.master_timetable import reader_account
-from app.models import Source, User
+from app.models import Event, Source, User
 from app.timetables import read_timetables
 from app.batch_sync import latest_batch
 
@@ -26,6 +27,69 @@ def main():
         users = {user.id: user for user in db.scalars(select(User))}
         batch = latest_batch(db)
         outcomes = batch.outcomes if batch else {}
+        calendar_audits = []
+        for item in sources:
+            user = users.get(item.user_id)
+            if (
+                not user
+                or user.email.strip().lower() != config.master_timetable_email.strip().lower()
+                or not item.calendar_id
+            ):
+                continue
+            stored = list(db.scalars(select(Event).where(Event.source_id == item.id)))
+            remote_events = {}
+            try:
+                with Google(db, user) as calendar_google:
+                    page_token = None
+                    while True:
+                        params = {
+                            "maxResults": 2500,
+                            "fields": "items(id,summary,location,start,end,status),nextPageToken",
+                        }
+                        if page_token:
+                            params["pageToken"] = page_token
+                        result = calendar_google.request(
+                            "GET",
+                            "https://www.googleapis.com/calendar/v3/calendars/"
+                            + quote(item.calendar_id, safe="")
+                            + "/events",
+                            params=params,
+                        )
+                        remote_events.update({event["id"]: event for event in result.get("items", [])})
+                        page_token = result.get("nextPageToken")
+                        if not page_token:
+                            break
+                active_stored = [event for event in stored if not event.cancelled]
+                missing = [event for event in active_stored if event.id not in remote_events]
+                mismatched = []
+                for event in active_stored:
+                    remote = remote_events.get(event.id)
+                    if not remote:
+                        continue
+                    payload = event.payload
+                    if any(
+                        remote.get(field) != payload.get(field)
+                        for field in ("summary", "location")
+                    ) or remote.get("start", {}).get("dateTime") != payload.get("start", {}).get("dateTime") or remote.get(
+                        "end", {}
+                    ).get("dateTime") != payload.get("end", {}).get("dateTime"):
+                        mismatched.append(remote)
+                calendar_audits.append({
+                    "programme": item.programme,
+                    "section": item.section,
+                    "status": "readable",
+                    "stored_active_events": len(active_stored),
+                    "remote_active_events": sum(event.get("status") != "cancelled" for event in remote_events.values()),
+                    "missing_from_google_calendar": len(missing),
+                    "payload_mismatches": len(mismatched),
+                    "remote_locations": dict(Counter(event.get("location", "") for event in remote_events.values() if event.get("status") != "cancelled")),
+                })
+            except Exception as exc:
+                calendar_audits.append({
+                    "programme": item.programme,
+                    "section": item.section,
+                    "status": type(exc).__name__,
+                })
         section_headers = []
         for timetable in config.additional_timetables:
             if not timetable.enabled:
@@ -55,6 +119,7 @@ def main():
     ]
     print(json.dumps({
         "section_headers": section_headers,
+        "main_account_calendar_audit": calendar_audits,
         "active_accounts": [
             {
                 "is_main_account": users.get(item.user_id).email.strip().lower() == config.master_timetable_email.strip().lower()
