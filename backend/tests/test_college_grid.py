@@ -53,6 +53,17 @@ def test_grid_sections_and_cell_specific_times_rooms_and_reservations():
     assert by_title["FA-Quiz-1"]["section"] == "F"
 
 
+def test_occupied_reservations_do_not_quarantine_the_section_or_hide_neighboring_class():
+    book, sheet = workbook()
+    sheet["J7"] = "Occupited for IBA Sec-F"
+    sheet["L7"] = "MPP-Quiz-2\n04:40 pm to 05:00 pm\n-------------\nOccupited for CF Sec-F"
+
+    events = parse(book, tolerant=True)
+
+    assert not events.issues
+    assert [(event["section"], event["payload"]["summary"]) for event in events] == [("B", "MPP-Quiz-2")]
+
+
 def test_each_section_keeps_its_own_class():
     book, sheet = workbook()
     expected = {

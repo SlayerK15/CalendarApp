@@ -76,15 +76,22 @@ def apply_sync(db, source, google, parsed=None):
     desired = {e["row_id"]: e for e in selected}
     for row_id, event in existing.items():
         if row_id not in desired:
+            preserved = event_scope(row_id) in preserved_scopes
             desired[row_id] = {
                 "row_id": row_id,
                 "payload": event.payload,
-                "cancelled": event.cancelled if event_scope(row_id) in preserved_scopes else True,
+                "cancelled": event.cancelled if preserved else False,
+                "deleted": not preserved,
             }
     updates = 0
     for row_id, item in desired.items():
         previous = existing.get(row_id)
-        if previous and previous.payload == item["payload"] and previous.cancelled == item["cancelled"]:
+        if (
+            previous
+            and not item.get("deleted")
+            and previous.payload == item["payload"]
+            and previous.cancelled == item["cancelled"]
+        ):
             continue
         if not source.calendar_id:
             source.calendar_id = google.calendar(source)
@@ -101,9 +108,12 @@ def apply_sync(db, source, google, parsed=None):
             source.calendar_id,
             event_id,
             payload,
-            deleted=item["cancelled"] and settings().cancelled_event_behaviour == "delete",
+            deleted=item.get("deleted", False)
+            or (item["cancelled"] and settings().cancelled_event_behaviour == "delete"),
         )
-        if previous:
+        if item.get("deleted"):
+            db.delete(previous)
+        elif previous:
             previous.payload, previous.cancelled = item["payload"], item["cancelled"]
         else:
             db.add(
@@ -119,7 +129,7 @@ def apply_sync(db, source, google, parsed=None):
         db.commit()
         updates += 1
     source.fingerprint = None if issues else current_fingerprint
-    source.event_count = sum(not e["cancelled"] for e in desired.values())
+    source.event_count = sum(not e["cancelled"] and not e.get("deleted", False) for e in desired.values())
     if issues:
         return SyncResult("partial", partial_message(issues, updates))
     return "success"

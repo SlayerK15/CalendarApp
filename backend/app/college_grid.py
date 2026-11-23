@@ -118,6 +118,7 @@ def is_non_class(text):
     return (
         not normalized
         or reservation.startswith("booked")
+        or bool(re.match(r"^occup(?:ied|ited)\b", reservation))
         or bool(ROOM_BOOKING.match(reservation))
         or bool(re.search(r"\bno\b.*\bclasses\b", normalized))
         or bool(re.fullmatch(r"(?:mid|end)[- ]term exam week", normalized))

@@ -38,7 +38,10 @@ class FakeGoogle:
         if self.fail:
             raise RuntimeError("provider unavailable")
         self.calls.append((event_id, copy.deepcopy(payload), deleted))
-        self.remote[event_id] = copy.deepcopy(payload)
+        if deleted:
+            self.remote.pop(event_id, None)
+        else:
+            self.remote[event_id] = copy.deepcopy(payload)
 
 
 def test_central_timetable_sync_does_not_read_student_drive(db, monkeypatch):
@@ -171,7 +174,7 @@ def test_crash_after_google_write_uses_same_id(db):
     assert len(google.remote) == 1
 
 
-def test_removed_class_is_marked(db):
+def test_removed_class_is_deleted_from_calendar_and_database(db):
     source, google = db.get(Source, "source"), FakeGoogle()
     row2 = ROW.copy()
     row2[0] = "math-002"
@@ -180,7 +183,10 @@ def test_removed_class_is_marked(db):
     db.commit()
     google.rows.pop()
     apply_sync(db, source, google)
-    assert google.calls[-1][1]["summary"].startswith("[CANCELLED]")
+    removed_id = google.calls[-1][0]
+    assert google.calls[-1][2] is True
+    assert removed_id not in google.remote
+    assert {event.row_id for event in db.scalars(select(Event))} == {"math-001"}
 
 
 def test_parser_and_destructive_guard():
