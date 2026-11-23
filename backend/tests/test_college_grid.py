@@ -189,6 +189,23 @@ def test_untimed_extra_class_uses_next_slot_for_every_section(cell, section):
     assert events[1]["payload"]["location"] == "Online"
 
 
+@pytest.mark.parametrize(
+    "cell,section",
+    [("G7", "A"), ("L7", "B"), ("Q7", "C"), ("V7", "D"), ("AA7", "E"), ("AF7", "F")],
+)
+def test_slash_delimited_extra_class_uses_next_slot_for_every_section(cell, section):
+    book, sheet = workbook()
+    sheet[cell] = "MM-II-3\nProf. Somnath / ---------- /\nBC-I-13\nProf. Ravinder\n(Online)"
+
+    events = parse(book, tolerant=True)
+
+    assert not events.issues
+    assert {event["section"] for event in events} == {section}
+    assert [event["payload"]["start"]["dateTime"][11:16] for event in events] == ["14:45", "16:15"]
+    assert [event["payload"]["end"]["dateTime"][11:16] for event in events] == ["16:00", "17:30"]
+    assert events[1]["payload"]["location"] == "Online"
+
+
 def test_additional_classes_continue_after_each_fifteen_minute_break():
     book, sheet = workbook()
     sheet["D7"] = "ME-1\nProf. First\n----------\nME-2\nProf. Second\n----------\nME-3\nProf. Third"

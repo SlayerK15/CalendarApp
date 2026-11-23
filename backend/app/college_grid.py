@@ -276,7 +276,9 @@ def parse_cell(
             else:
                 previous_end = matches[index - 1].end()
                 gap = text[previous_end : match.start()]
-                has_entry_separator = re.search(r"(?m)^[ \t]*[-._=•…]{8,}[ \t]*$", gap)
+                has_entry_separator = re.search(
+                    r"(?m)(?:^|[/\n])[ \t]*[-._=•…]{8,}[ \t]*(?:$|[/\n])", gap
+                )
                 if not number or not has_entry_separator:
                     raise ValueError(f"An extra class needs its own time at row {row_index + 1}, column {column + 1}")
                 start = add_minutes(active_end, 15)
