@@ -53,6 +53,26 @@ def test_grid_sections_and_cell_specific_times_rooms_and_reservations():
     assert by_title["FA-Quiz-1"]["section"] == "F"
 
 
+def test_each_section_keeps_its_own_class():
+    book, sheet = workbook()
+    expected = {
+        "D7": ("A", "MM-1"),
+        "I7": ("B", "BC-2"),
+        "N7": ("C", "OSCM-3"),
+        "S7": ("D", "OB-4"),
+        "X7": ("E", "MF-5"),
+        "AC7": ("F", "FA-6"),
+    }
+    for cell, (_, course) in expected.items():
+        sheet[cell] = f"{course}\nProf. {course}"
+
+    events = parse(book)
+
+    assert {event["payload"]["summary"]: event["section"] for event in events} == {
+        course: section for section, course in expected.values()
+    }
+
+
 def test_cell_and_partial_rich_text_strikethrough_cancel_only_affected_class():
     book, sheet = workbook()
     sheet["D7"] = "ME-1\nProf. Example"

@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: '17 */6 * * *'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Run the calendar sync or inspect the shared timetable without changing calendars
+        type: choice
+        options:
+          - sync
+          - inspect
+        default: sync
 
 permissions:
   contents: read
@@ -48,4 +56,9 @@ jobs:
           cache: pip
           cache-dependency-path: 'backend/requirements*.txt'
       - run: pip install -r requirements.txt
-      - run: python -m app.jobs.sync_all
+      - name: Inspect shared timetable (read only)
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'inspect'
+        run: python -m app.jobs.inspect_timetable
+      - name: Sync timetables
+        if: github.event_name != 'workflow_dispatch' || inputs.mode == 'sync'
+        run: python -m app.jobs.sync_all
