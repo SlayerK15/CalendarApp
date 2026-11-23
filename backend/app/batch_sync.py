@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from app.config import settings
 from app.db import SessionLocal
 from app.locks import source_lock
-from app.master_timetable import shared_timetable
+from app.master_timetable import TIMETABLE_PARSER_VERSION, shared_timetable
 from app.models import Source, SyncBatch
 from app.parser import ParsedEvents
 from app.sync import sync_source, utcnow
@@ -93,7 +93,8 @@ def run_shared_sync(batch_id):
             batch.started_at = batch.started_at or utcnow()
             db.commit()
             refresh_notice_safely(db, start=True)
-            if batch.snapshot is None:
+            snapshot_is_current = batch.snapshot and batch.snapshot.get("parser_version") == TIMETABLE_PARSER_VERSION
+            if not snapshot_is_current:
                 try:
                     parsed = shared_timetable(db, force_refresh=True)
                 except Exception as exc:
@@ -105,7 +106,15 @@ def run_shared_sync(batch_id):
                     db.commit()
                     logger.warning("batch timetable refresh failed type=%s", type(exc).__name__)
                     return "failed"
-                batch.snapshot = {"events": list(parsed), "issues": parsed.issues, "sections": sorted(parsed.sections)}
+                batch.snapshot = {
+                    "events": list(parsed),
+                    "issues": parsed.issues,
+                    "sections": sorted(parsed.sections),
+                    "parser_version": TIMETABLE_PARSER_VERSION,
+                }
+                # A new parse can change both section assignments and event
+                # payloads. Reconcile every account against that same snapshot.
+                batch.outcomes = {}
                 db.commit()
             else:
                 parsed = ParsedEvents()

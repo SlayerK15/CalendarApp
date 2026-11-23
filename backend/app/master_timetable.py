@@ -15,7 +15,7 @@ from app.parser import ParsedEvents
 from app.security import decrypt
 from app.timetables import read_timetables
 
-TIMETABLE_PARSER_VERSION = 4
+TIMETABLE_PARSER_VERSION = 5
 
 
 class MasterTimetableUnavailable(ValueError):

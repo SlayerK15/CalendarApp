@@ -96,12 +96,18 @@ def test_one_fresh_snapshot_updates_all_accounts_and_isolates_reconnect_and_erro
 
 def test_interrupted_batch_resumes_unfinished_accounts_with_original_snapshot(batch_db, monkeypatch):
     import app.batch_sync as batch
+    from app.master_timetable import TIMETABLE_PARSER_VERSION
 
     with batch_db() as db:
         job = batch.queue_shared_sync(db)
         job.status = "running"
         job.outcomes = {"s0": "success", "s1": "reconnect_required"}
-        job.snapshot = {"events": list(timetable()), "issues": [], "sections": [["MBA", "A"]]}
+        job.snapshot = {
+            "events": list(timetable()),
+            "issues": [],
+            "sections": [["MBA", "A"]],
+            "parser_version": TIMETABLE_PARSER_VERSION,
+        }
         db.commit()
         batch_id = job.id
     calls = []
@@ -117,6 +123,41 @@ def test_interrupted_batch_resumes_unfinished_accounts_with_original_snapshot(ba
     result = batch.run_shared_sync(batch_id)
     assert set(calls) == {"s2", "s3"}
     assert result["up_to_date"] == 3 and result["reconnect_required"] == 1
+
+
+def test_interrupted_batch_refreshes_stale_parser_snapshot_and_reprocesses_all_accounts(batch_db, monkeypatch):
+    import app.batch_sync as batch
+
+    refreshed = timetable()
+    refreshed[0] = {"row_id": "updated-event"}
+    reads, calls = [], []
+
+    def read(db, *, force_refresh):
+        reads.append(force_refresh)
+        return refreshed
+
+    def sync(source_id, parsed):
+        calls.append(source_id)
+        assert parsed[0]["row_id"] == "updated-event"
+        return "success"
+
+    with batch_db() as db:
+        job = batch.queue_shared_sync(db)
+        job.status = "running"
+        job.outcomes = {"s0": "success", "s1": "partial"}
+        job.snapshot = {"events": list(timetable()), "issues": [], "sections": [["MBA", "A"]]}
+        db.commit()
+        batch_id = job.id
+
+    monkeypatch.setattr(batch, "shared_timetable", read)
+    monkeypatch.setattr(batch, "sync_source", sync)
+    summary = batch.run_shared_sync(batch_id)
+
+    assert reads == [True]
+    assert set(calls) == {"s0", "s1", "s2", "s3"}
+    assert summary["up_to_date"] == 4
+    with batch_db() as db:
+        assert db.get(SyncBatch, batch_id).snapshot is None
 
 
 def test_invalid_main_timetable_stops_before_any_calendar_updates(batch_db, monkeypatch):
