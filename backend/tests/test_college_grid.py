@@ -149,14 +149,19 @@ def test_cancelled_replacement_can_share_default_slot():
     assert [e["payload"]["start"]["dateTime"][11:16] for e in result] == ["14:45", "14:45", "16:15"]
 
 
-def test_term_two_extra_class_uses_next_slot_and_does_not_need_manual_time():
+@pytest.mark.parametrize(
+    "cell,section",
+    [("G7", "A"), ("L7", "B"), ("Q7", "C"), ("V7", "D"), ("AA7", "E"), ("AF7", "F")],
+)
+def test_term_two_extra_class_uses_next_slot_for_every_section(cell, section):
     book, sheet = workbook()
-    sheet["AF7"] = "MM-II-3\nProf. Somnath\n----------\nBC-I-13\nProf. Ravinder\n(Online)"
+    sheet[cell] = "MM-II-3\nProf. Somnath\n----------\nBC-I-13\nProf. Ravinder\n(Online)"
 
     events = parse(book, tolerant=True)
 
     assert not events.issues
     assert [event["payload"]["summary"] for event in events] == ["MM-II-3", "BC-I-13"]
+    assert {event["section"] for event in events} == {section}
     assert [event["payload"]["start"]["dateTime"][11:16] for event in events] == ["14:45", "16:15"]
     assert [event["payload"]["end"]["dateTime"][11:16] for event in events] == ["16:00", "17:30"]
     assert events[1]["payload"]["location"] == "Online"
